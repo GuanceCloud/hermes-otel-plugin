@@ -1,6 +1,6 @@
 # Metrics
 
-[中文版本](../zh/metrcis.md)
+[中文版本](../zh/metrics.md)
 
 ## Overview
 

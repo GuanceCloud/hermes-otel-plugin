@@ -26,7 +26,7 @@ Architecture and timing diagrams: [docs/en/architecture.md](docs/en/architecture
 
 Trace / span description: [docs/en/trace-description.md](docs/en/trace-description.md)
 
-Metrics description: [docs/en/metrcis.md](docs/en/metrcis.md)
+Metrics description: [docs/en/metrics.md](docs/en/metrics.md)
 
 Skill timing semantics:
 

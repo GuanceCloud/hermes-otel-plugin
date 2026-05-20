@@ -26,7 +26,7 @@
 
 Trace / span 描述见：[docs/zh/trace-description.md](docs/zh/trace-description.md)
 
-Metrics 描述见：[docs/zh/metrcis.md](docs/zh/metrcis.md)
+Metrics 描述见：[docs/zh/metrics.md](docs/zh/metrics.md)
 
 关于 skill 的两个时间语义：
 

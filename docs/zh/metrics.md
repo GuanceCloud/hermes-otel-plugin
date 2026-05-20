@@ -1,6 +1,6 @@
 # 指标说明
 
-[English Version](../en/metrcis.md)
+[English Version](../en/metrics.md)
 
 ## 概览
 
