@@ -24,7 +24,7 @@ One user turn maps to one trace. Model calls, tool calls, and delegated child ag
 
 Architecture and timing diagrams: [docs/architecture.md](docs/architecture.md)
 
-Trace / span description: [docs/trace-description.md](docs/trace-description.md)
+Trace / span description: [docs/trace-description.en.md](docs/trace-description.en.md)
 
 Metrics description: [docs/metrcis.md](docs/metrcis.md)
 

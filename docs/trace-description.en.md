@@ -1,0 +1,403 @@
+# Hermes Trace Description
+
+[中文版本](trace-description.md)
+
+## Overview
+
+- This document only describes trace / span semantics that are currently stable in `hermes-otel-plugin`.
+- It does not expand on historical compatibility mappings.
+- It only documents span types and attributes that are reliable for current querying and troubleshooting.
+- For architecture and timing, see [architecture.md](architecture.md).
+
+## AI Agent Semantics
+
+- Here, `AI Agent` means the execution entity Hermes assembles for one user input by combining context, model calls, tools, skills, and delegated subagents.
+- In Hermes trace semantics:
+  - `hermes_request`: one complete request for one user input
+  - `agent_run`: the primary execution window of that request
+  - `llm`: one real model call during execution
+  - `tool:*`: one tool call during execution
+  - `skill:*`: the effective execution window of a skill during the request
+  - `subagent:*`: the execution window of a delegated child agent
+
+Therefore:
+
+- `llm` is not the same thing as the agent
+- `agent_run` is the span closest to agent execution
+- Multiple `llm`, `tool:*`, `skill:*`, and `subagent:*` spans together form one agent run
+
+## Final Span Model
+
+### Retained Spans
+
+- `hermes_request`
+- `agent_run`
+- `llm`
+- `tool:*`
+- `skill:*`
+- `subagent:*`
+
+### Flow Nodes Not Split Into Separate Spans
+
+- Decision Router
+- Tool Result
+- Skill Result
+- Final Answer
+- Session Persist
+
+Notes:
+
+- These nodes are expressed through existing span relationships and attributes rather than independent spans.
+- `Final Answer` is expressed by the last `llm` span with `output_kind=text` and `output_preview`.
+- Tool and skill results are expressed through `tool_result_*` and `skill_*` attributes.
+
+### Design Boundaries
+
+- One user input maps to one trace
+- Only spans that are stable and useful for troubleshooting are retained
+- If something can be expressed with attributes, it does not get a new span
+- If a subagent runs in a separate session, it is folded into the parent request as `subagent:*`
+
+## Core Spans
+
+### `hermes_request`
+
+Represents one complete request for one user input.
+
+Purpose:
+
+- The root span of the trace
+- The total window from message entry into Hermes until request completion
+- The request-level summary carrier, such as:
+  - `session_id`
+  - `final_status`
+  - `provider_name`
+  - `response_model`
+  - aggregated tokens
+  - final output preview
+
+### `agent_run`
+
+Represents the main execution window of one agent request.
+
+Purpose:
+
+- The primary execution span under `hermes_request`
+- The parent context for all `llm`, `tool:*`, `skill:*`, and `subagent:*` spans in this request
+- The execution-level summary carrier, such as:
+  - final request state
+  - aggregated tokens
+  - final output preview
+
+### `llm`
+
+Represents one model request.
+
+Purpose:
+
+- One real model call
+- Carries:
+  - `provider_name`
+  - `request_model`
+  - `response_model`
+  - `input_preview`
+  - `tool_context_preview`
+  - `output_preview`
+  - `output_kind`
+  - token usage
+
+Additional notes:
+
+- Current Hermes host hooks do not provide the full raw prompt / response body to the plugin.
+- Therefore `llm.output_preview` is still a plugin-side summary, not the raw provider response.
+- `llm.input_preview` is currently used only for the first model call and represents the original user input summary.
+- Later model calls use `tool_context_preview` when plugin-side tool context needs to be represented.
+
+### `tool:*`
+
+Represents one tool call.
+
+Purpose:
+
+- One tool execution
+- Carries:
+  - `tool_name`
+  - `tool_call_id`
+  - `tool_phase`
+  - `tool_outcome`
+  - `tool_arg_keys`
+  - `tool_target`
+  - `tool_command`
+  - `tool_args_preview`
+  - `tool_result_status`
+  - `tool_result_preview`
+
+Alignment with `openclaw-otel-plugin`:
+
+- Core fields already aligned:
+  - `tool_name`
+  - `tool_call_id`
+  - `tool_phase`
+  - `tool_outcome`
+  - `tool_arg_keys`
+  - `tool_target`
+  - `tool_command`
+  - `tool_args_preview`
+  - `tool_result_status`
+  - `tool_result_preview`
+- Fields Hermes cannot reliably provide today:
+  - `tool_meta_preview`
+  - `tool_partial_result_preview`
+  - `tool_loop_level`
+  - `tool_loop_action`
+  - `tool_loop_detector`
+  - `tool_loop_count`
+  - `tool_loop_paired_tool`
+  - `tool_loop_message`
+- Reason:
+  - Current Hermes plugin hooks do not directly expose tool meta / partial result / loop detector events
+  - These fields cannot be reliably reconstructed from the plugin side alone
+
+### `skill:*`
+
+Represents the effective execution window of a skill in the current request.
+
+Purpose:
+
+- It does not represent the `skill_view` load duration
+- It represents the window during which the skill remains effective in the request after being loaded into context
+
+Notes:
+
+- The skill load action itself is represented by `tool:skill_view`
+- `skill:*` spans may overlap, which means multiple skills are effective at the same time
+
+### `subagent:*`
+
+Represents a child agent execution window.
+
+Purpose:
+
+- One delegated child-agent execution
+- Prefer attaching to the triggering `tool:delegate_task`
+- Fall back to `agent_run` if no delegate tool span can be found
+
+## Status
+
+`status` represents the execution state of the current span itself.
+
+Purpose:
+
+- To decide whether a specific span succeeded or failed
+- Useful for pinpointing technical failures and execution errors
+- Common on:
+  - `llm`
+  - `tool:*`
+  - `skill:*`
+  - `subagent:*`
+
+Recommended interpretation:
+
+| value | meaning |
+| --- | --- |
+| `ok` | The span succeeded |
+| `error` | The span failed |
+| `unset` / empty | No explicit span status was set |
+
+Usage guidance:
+
+- To inspect whether a specific `tool:*` failed, prefer `status`
+- To inspect whether a specific `llm` ended abnormally, prefer `status`
+
+## Final Status
+
+`final_status` represents the final business outcome of a `hermes_request` or `agent_run`.
+
+Purpose:
+
+- To decide whether an agent request finished successfully, failed, got interrupted, was reset, or was superseded
+- Used for request-level or run-level result analysis
+- Not intended for deciding whether one child span had an isolated technical error
+
+Recommended interpretation:
+
+| value | meaning |
+| --- | --- |
+| `completed` | The request completed and produced a result |
+| `failed` | The request ultimately failed |
+| `interrupted` | The request was interrupted |
+| `reset` | The request ended because of session reset |
+| `expired` | The request was force-closed by plugin TTL fallback |
+| `superseded` | A newer request in the same session replaced it |
+
+Usage guidance:
+
+- To inspect whether a Hermes request ultimately completed, prefer `final_status`
+- Even if a specific `tool:*` has `status=error`, `final_status` may still be `completed` if the request produced a valid result
+
+## Shared Span Attributes
+
+| attribute | description |
+| --- | --- |
+| `agent_runtime` | Current runtime, fixed to `hermes` |
+| `session_id` | Current Hermes session id |
+| `platform` | Platform such as `cli` |
+| `final_status` | Final request state |
+| `provider_name` | Model provider |
+| `request_model` | Requested model |
+| `response_model` | Response model |
+| `request_type` | Request classification, currently `user_request` or `auto_review` |
+| `is_auto_review` | Whether the request is an automatic Hermes review flow |
+| `review_category` | Review category, currently `skill` for automatic review |
+| `skills` | Related skill list |
+| `skill_count` | Related skill count |
+| `output_preview` | Output summary |
+| `output_length` | Output length |
+
+### Request Type
+
+`request_type` is used to distinguish a normal user request from an internal Hermes review request triggered after the main task.
+
+Current values:
+
+| value | meaning |
+| --- | --- |
+| `user_request` | Default value. All normal user requests use this value. |
+| `auto_review` | Hermes automatic review request. Currently used mainly for skill review / skill patch scenarios. |
+
+Additional notes:
+
+- The default is `request_type=user_request`
+- Only prompts matching the internal review prompt pattern are marked as `auto_review`
+- When `request_type=auto_review`, the request also carries:
+  - `is_auto_review=true`
+  - `review_category=skill`
+- When `request_type=user_request`:
+  - `is_auto_review=false`
+  - `review_category` is usually empty
+
+## Model Attributes
+
+| attribute | description |
+| --- | --- |
+| `api_mode` | Model API mode |
+| `api_call_count` | The Nth model call inside the request |
+| `input_preview` | Input summary of the first model call, currently usually the user input summary |
+| `tool_context_preview` | Plugin-synthesized tool context summary for later model calls |
+| `input_length` | Input length |
+| `output_preview` | Output summary |
+| `output_length` | Output length |
+| `output_kind` | Output type such as `text` or `tool_call` |
+| `assistant_tool_call_count` | Number of tool calls emitted by this model response |
+| `finish_reason` | Provider finish reason |
+| `usage_input_tokens` | Input tokens |
+| `usage_output_tokens` | Output tokens |
+| `usage_total_tokens` | Total tokens, currently `input + output` |
+| `usage_cache_read_input_tokens` | Cache read tokens |
+| `usage_cache_write_input_tokens` | Cache write tokens |
+| `usage_cache_total_tokens` | Cache read + cache write |
+| `usage_reasoning_tokens` | Reasoning tokens, only present when Hermes / provider exposes them |
+
+## Tool Attributes
+
+| attribute | description |
+| --- | --- |
+| `tool_name` | Tool name |
+| `tool_call_id` | Tool call identifier |
+| `tool_phase` | Tool phase, currently `call` or `result` |
+| `tool_outcome` | Plugin-normalized tool result, currently `completed` or `error` |
+| `tool_arg_keys` | Tool argument key list |
+| `tool_target` | Tool target such as file path, search path, or skill name |
+| `tool_command` | Tool command, mainly for `terminal` |
+| `tool_args_preview` | Tool argument summary |
+| `tool_result_status` | Explicit tool status from the result payload, preferring `result.details.status`, then `result.status` |
+| `tool_result_preview` | Tool result summary |
+
+### Tool Tag Standard
+
+This section defines the aligned product-facing tool tag model relative to `openclaw-otel-plugin`.
+
+#### Required
+
+These fields are recommended as required tool tags in the product model.
+
+| attribute | requirement | description |
+| --- | --- | --- |
+| `tool_name` | Required | Tool name |
+| `tool_call_id` | Required | Tool call identifier. May be empty if the host does not provide one. |
+| `tool_phase` | Required | Current tool phase. Current model: `call` / `result`. |
+| `tool_outcome` | Required | Plugin-normalized result. Current model: `completed` / `error`. |
+| `tool_arg_keys` | Required | Tool argument key list |
+| `tool_args_preview` | Required | Tool argument summary |
+| `tool_result_preview` | Required | Tool result summary |
+| `tool_result_status` | Required | Explicit status from the tool result payload, distinct from `tool_outcome` |
+
+#### Conditional
+
+These fields should be part of the standard model, but should only be emitted when the host or plugin can derive them reliably.
+
+| attribute | current Hermes status | description |
+| --- | --- | --- |
+| `skill_name` | Supported | Mainly used for `skill_view` and skill-related tools |
+| `tool_target` | Supported | Derived for common tool types such as file path, search path, and skill name |
+| `tool_command` | Supported | Currently mainly for `terminal` |
+
+#### Not Currently Available In Hermes
+
+These fields exist in OpenClaw, but Hermes cannot reliably provide them from current plugin hooks and should not fake them.
+
+| attribute | reason |
+| --- | --- |
+| `tool_meta_preview` | Hermes hooks do not expose tool meta directly |
+| `tool_partial_result_preview` | Hermes hooks do not expose partial-result lifecycle events |
+| `tool_loop_level` | Hermes hooks do not expose loop detector events |
+| `tool_loop_action` | Same |
+| `tool_loop_detector` | Same |
+| `tool_loop_count` | Same |
+| `tool_loop_paired_tool` | Same |
+| `tool_loop_message` | Same |
+
+#### Normalization Rules
+
+- `tool_outcome` is the plugin-normalized execution result used for cross-tool aggregation.
+- `tool_result_status` only represents the explicit status in the tool result payload and must not collapse into `tool_outcome`.
+- `tool_target` and `tool_command` may be derived conservatively by tool type, but should not contain guessed values just for completeness.
+- For product standardization, semantic stability is more important than field count.
+
+## Skill Attributes
+
+| attribute | description |
+| --- | --- |
+| `skill_name` | Skill name |
+| `skill_description` | Skill description |
+| `skill_tags` | Skill tags |
+| `skill_related_skills` | Related skills |
+| `skill_content_length` | Skill content length |
+| `skill_source_tool_call_id` | `skill_view` tool call id that triggered the skill span |
+
+## Subagent Attributes
+
+| attribute | description |
+| --- | --- |
+| `subagent_role` | Display role of the child agent. If Hermes only returns a generic role such as `leaf`, the plugin prefers falling back to `delegate_task.profile`. |
+| `subagent_runtime_role` | Raw child-agent role returned by Hermes hooks, such as `leaf` |
+| `outcome` | Child-agent result |
+| `output_preview` | Child-agent output summary |
+| `output_length` | Child-agent output length |
+
+## Token Accounting Rules
+
+- `usage_total_tokens = usage_input_tokens + usage_output_tokens`
+- Cache tokens are not merged into `usage_total_tokens`
+- Cache tokens are recorded separately in `usage_cache_*`
+- If the provider returns cumulative cache counters, the plugin normalizes them into per-`llm` deltas
+- The root span and `agent_run` aggregate tokens across all `llm` spans inside the request
+
+## Known Boundaries
+
+- `llm.input_preview` is not the raw provider request body. It is currently the user-input summary for the first model call.
+- `llm.tool_context_preview` is a plugin-synthesized tool-context summary and does not represent the raw provider prompt.
+- `llm.output_preview` is not the raw provider response body. It is a plugin-side summary.
+- `usage_reasoning_tokens` is only present when Hermes or the provider already exposes it.
+- `skill:*` represents the active execution window of a skill, not its load duration.
+- `tool:skill_view` represents the skill load action itself.

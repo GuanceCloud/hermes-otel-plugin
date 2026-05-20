@@ -1,5 +1,7 @@
 # Metrics
 
+[中文版本](metrcis.zh.md)
+
 ## Overview
 
 This document describes the metrics currently emitted by `hermes-otel-plugin`.
