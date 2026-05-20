@@ -1,6 +1,6 @@
 # Architecture Diagram
 
-[中文版本](architecture.zh.md)
+[中文版本](../zh/architecture.md)
 
 This document explains the runtime architecture of `hermes-otel-plugin`, the mapping from Hermes hooks to spans, and the lifecycle of `skill`, `subagent`, `llm`, and `tool`.
 

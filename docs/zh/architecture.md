@@ -1,6 +1,6 @@
 # 架构图
 
-[English Version](architecture.md)
+[English Version](../en/architecture.md)
 
 本文档说明 `hermes-otel-plugin` 的运行时架构、Hermes hooks 到 spans 的映射关系，以及 `skill`、`subagent`、`llm`、`tool` 的生命周期。
 

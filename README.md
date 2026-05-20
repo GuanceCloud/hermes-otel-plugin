@@ -22,11 +22,11 @@ This repository follows the design direction of `openclaw-otel-plugin`, but the 
 
 One user turn maps to one trace. Model calls, tool calls, and delegated child agents become child spans under the turn. A `skill:<name>` span starts after a successful `skill_view` load and remains active until the current turn finishes, representing that skill's effective execution window for the request. Multiple skills may stay active at the same time, so overlapping skill spans are expected. Related `llm` spans also carry `skills` and `skill_count` to show which skills were active for that model call.
 
-Architecture and timing diagrams: [docs/architecture.md](docs/architecture.md)
+Architecture and timing diagrams: [docs/en/architecture.md](docs/en/architecture.md)
 
-Trace / span description: [docs/trace-description.en.md](docs/trace-description.en.md)
+Trace / span description: [docs/en/trace-description.md](docs/en/trace-description.md)
 
-Metrics description: [docs/metrcis.md](docs/metrcis.md)
+Metrics description: [docs/en/metrcis.md](docs/en/metrcis.md)
 
 Skill timing semantics:
 

@@ -22,11 +22,11 @@
 
 一条用户 turn 对应一条 trace；模型调用、tool 调用和子代理执行会挂到该 trace 下。`skill:<name>` span 会在 `skill_view` 成功加载后开始，并持续到当前 turn 结束，表示该 skill 在本次请求中的生效执行窗口。多个 skill 可以同时活跃，因此允许 span 重叠。相关 `llm` span 也会附带 `skills` 和 `skill_count`，用于标记该次模型调用受哪些 skill 影响。
 
-架构与时序图见：[docs/architecture.zh.md](docs/architecture.zh.md)
+架构与时序图见：[docs/zh/architecture.md](docs/zh/architecture.md)
 
-Trace / span 描述见：[docs/trace-description.md](docs/trace-description.md)
+Trace / span 描述见：[docs/zh/trace-description.md](docs/zh/trace-description.md)
 
-Metrics 描述见：[docs/metrcis.zh.md](docs/metrcis.zh.md)
+Metrics 描述见：[docs/zh/metrcis.md](docs/zh/metrcis.md)
 
 关于 skill 的两个时间语义：
 

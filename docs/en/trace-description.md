@@ -1,6 +1,6 @@
 # Hermes Trace Description
 
-[中文版本](trace-description.md)
+[中文版本](../zh/trace-description.md)
 
 ## Overview
 

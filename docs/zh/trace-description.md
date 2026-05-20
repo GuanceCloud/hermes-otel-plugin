@@ -1,13 +1,13 @@
-# Hermes Trace Description
+# Hermes Trace 说明
 
-[English Version](trace-description.en.md)
+[English Version](../en/trace-description.md)
 
 ## 说明
 
 - 本文档只描述 `hermes-otel-plugin` 当前已经稳定落地的 trace / span 语义
 - 不展开历史兼容映射
 - 只写当前查询和排障时真正可依赖的 span 类型与字段
-- 架构和时序可参考：[architecture.zh.md](architecture.zh.md)
+- 架构和时序可参考：[architecture.md](architecture.md)
 
 ## AI Agent 说明
 
