@@ -72,25 +72,81 @@ When `logs_enabled=true`, the plugin mirrors selected session, API request, tool
 
 ## Install
 
-This repo is designed to live at:
+The recommended path now follows the release-installer model used by `openclaw-otel-plugin`.
+
+### Quick install from a release package
+
+If you already have a built local release package:
+
+```bash
+python3 scripts/release.py
+bash output/install.sh output/hermes-otel-plugin.tar.gz \
+  --type otlp \
+  --endpoint http://127.0.0.1:9529/otel
+```
+
+For GTrace:
+
+```bash
+python3 scripts/release.py
+bash output/install.sh output/hermes-otel-plugin.tar.gz \
+  --type gtrace \
+  --endpoint https://llm-openway.guance.com \
+  --x-token <TOKEN>
+```
+
+The installer will:
+
+- install the plugin under `~/.hermes/plugins/hermes-otel-plugin`
+- install runtime Python dependencies into the Hermes runtime python
+- enable the plugin in `~/.hermes/config.yaml`
+- write the `hermes_otel_plugin` config section
+- try `hermes gateway restart` as a best-effort final step
+
+Useful flags:
+
+- `--no-config`
+- `--no-deps`
+- `--no-restart`
+- `--tag KEY=VALUE`
+- `--service-name NAME`
+
+### Install from a published release endpoint
+
+The installer also supports the same latest/version pattern as `openclaw-otel-plugin`:
+
+```bash
+OSS_ENDPOINT=https://example.com \
+bash scripts/install.sh latest \
+  --type gtrace \
+  --endpoint https://llm-openway.guance.com \
+  --x-token <TOKEN>
+```
+
+or:
+
+```bash
+OSS_ENDPOINT=https://example.com \
+bash scripts/install.sh v0.1.0 \
+  --type otlp \
+  --endpoint http://127.0.0.1:9529/otel
+```
+
+The script automatically appends `/hermes-otel-plugin` to `OSS_ENDPOINT` when needed.
+
+### Source install
+
+Manual source install is still supported when you are actively developing the plugin:
 
 ```text
-/home/liurui/code/hermes-otel-plugin
+~/.hermes/plugins/hermes-otel-plugin -> /path/to/hermes-otel-plugin
 ```
 
-and to be discovered through the existing symlink:
+You then need to:
 
-```text
-~/.hermes/plugins/hermes-otel-plugin -> /home/liurui/code/hermes-otel-plugin
-```
-
-Enable it in `~/.hermes/config.yaml`:
-
-```yaml
-plugins:
-  enabled:
-    - hermes-otel-plugin
-```
+- ensure `plugins.enabled` contains `hermes-otel-plugin`
+- ensure `hermes_otel_plugin.enabled=true`
+- install runtime dependencies in the Hermes Python environment
 
 ## Configuration
 

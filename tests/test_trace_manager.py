@@ -202,16 +202,28 @@ class TraceManagerTests(unittest.TestCase):
         self.assertEqual(llm_span.attributes["output_preview"], "toolCall:terminal")
         self.assertEqual(llm_span.attributes["output_kind"], "tool_call")
         root_span = next(span for span in self.runtime.spans if span.name == "hermes_request")
+        agent_span = next(span for span in self.runtime.spans if span.name == "agent_run")
+        self.assertEqual(root_span.attributes["span_kind"], "request")
+        self.assertEqual(agent_span.attributes["span_kind"], "agent")
         self.assertEqual(root_span.attributes["output_preview"], "done")
         self.assertEqual(root_span.attributes["usage_input_tokens"], 10)
         self.assertEqual(root_span.attributes["usage_output_tokens"], 3)
         self.assertEqual(root_span.attributes["usage_total_tokens"], 13)
         tool_span = next(span for span in self.runtime.spans if span.name == "tool:terminal")
+        self.assertEqual(llm_span.attributes["span_kind"], "llm")
+        self.assertEqual(tool_span.attributes["span_kind"], "tool")
         self.assertEqual(tool_span.attributes["tool_phase"], "result")
         self.assertEqual(tool_span.attributes["tool_outcome"], "completed")
         self.assertEqual(tool_span.attributes["tool_command"], "echo hello")
         self.assertEqual(tool_span.attributes["tool_result_preview"], '{"output": "hello"}')
         self.assertNotIn("tool_result_status", tool_span.attributes)
+        self.assertNotIn("usage_input_tokens", tool_span.attributes)
+        self.assertNotIn("usage_output_tokens", tool_span.attributes)
+        self.assertNotIn("usage_total_tokens", tool_span.attributes)
+        self.assertNotIn("usage_cache_read_input_tokens", tool_span.attributes)
+        self.assertNotIn("usage_cache_write_input_tokens", tool_span.attributes)
+        self.assertNotIn("usage_cache_total_tokens", tool_span.attributes)
+        self.assertNotIn("usage_reasoning_tokens", tool_span.attributes)
         tool_metric_attrs = self.manager._metrics._tool_call_count.calls[0][2]
         self.assertEqual(tool_metric_attrs["tool_name"], "terminal")
         self.assertEqual(tool_metric_attrs["outcome"], "completed")
@@ -543,6 +555,8 @@ class TraceManagerTests(unittest.TestCase):
 
         subagent_span = next(span for span in self.runtime.spans if span.name == "subagent:coder")
         self.assertIs(subagent_span.parent, delegate_span)
+        self.assertEqual(delegate_span.attributes["span_kind"], "tool")
+        self.assertEqual(subagent_span.attributes["span_kind"], "subagent")
         self.assertEqual(subagent_span.attributes["subagent_role"], "coder")
         self.assertEqual(subagent_span.attributes["subagent_runtime_role"], "leaf")
 
@@ -829,8 +843,12 @@ class TraceManagerTests(unittest.TestCase):
         )
 
         tool_spans = [span for span in self.runtime.spans if span.name == "tool:skill_view"]
+        skill_spans = [span for span in self.runtime.spans if span.name == "skill:dashboard"]
         self.assertEqual(len(tool_spans), 1)
         self.assertEqual(tool_spans[0].status_code, "OK")
+        self.assertEqual(tool_spans[0].attributes["span_kind"], "tool")
+        self.assertEqual(len(skill_spans), 1)
+        self.assertEqual(skill_spans[0].attributes["span_kind"], "skill")
 
     def test_skill_view_emits_skill_span(self) -> None:
         self.manager.start_turn(

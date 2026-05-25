@@ -26,6 +26,44 @@
 - `agent_run` 才是最接近 agent execution 的 span
 - 多次 `llm`、`tool:*`、`skill:*`、`subagent:*` 共同构成一次 agent 执行
 
+## 术语说明
+
+### `session`
+
+- `session` 是一段连续会话的容器
+- 一个 `session_id` 下会顺序保存多条消息
+- 同一个 `session` 可以包含多轮用户输入
+- 只有在显式 `/new`、`/resume` 切换、自动 reset、压缩分裂等场景下，才会切换到新的 `session_id`
+
+### `turn`
+
+- `turn` 表示同一个 `session` 中由“一条新的用户输入”触发的一轮完整处理
+- 一轮 `turn` 通常从一条 `role=user` 消息开始
+- 后面会跟随该轮产生的 `assistant`、`tool`、最终 `assistant` 等消息
+- 下一条新的 `role=user` 消息，表示下一轮 `turn` 开始
+
+补充说明：
+
+- Hermes 当前没有在持久化层单独存储独立的 `turn_id`
+- 因此 `turn` 主要通过消息序列中的 `role=user` 边界来识别
+- 在 `hermes-otel-plugin` 中，一次 `turn` 默认映射为一条 `trace`
+
+### `message`
+
+- `message` 是 `session` 中的最小持久化单位
+- 常见角色包括：
+  - `user`
+  - `assistant`
+  - `tool`
+- `message` 不等于 `turn`
+- 一次 `turn` 往往会产生多条 `message`
+
+### `llm call`
+
+- `llm call` 表示一次真实模型请求
+- 一次 `turn` 可以包含多次 `llm call`
+- 每次 `llm call` 在 trace 中对应一个 `llm` span
+
 ## 最终 Span 规范
 
 ### 保留的 Span
@@ -240,6 +278,7 @@
 | 字段 | 描述 |
 | --- | --- |
 | `agent_runtime` | 当前 runtime，固定为 `hermes` |
+| `span_kind` | span 分类字段，当前口径为 `request`、`agent`、`llm`、`tool`、`skill`、`subagent` |
 | `session_id` | 当前 Hermes session id |
 | `platform` | 平台，例如 `cli` |
 | `final_status` | 请求最终状态 |
@@ -386,6 +425,26 @@
 | `output_length` | 子代理输出长度 |
 
 ## Token 统计原则
+
+## Span Kind 口径
+
+`span_kind` 用于给不同 span 做稳定分类，便于平台侧过滤、分组和统一展示。
+
+当前 Hermes 口径：
+
+| span resource | span_kind |
+| --- | --- |
+| `hermes_request` | `request` |
+| `agent_run` | `agent` |
+| `llm` | `llm` |
+| `tool:*` | `tool` |
+| `skill:*` | `skill` |
+| `subagent:*` | `subagent` |
+
+说明：
+
+- 这不是 OpenTelemetry 原生 `SpanKind` 枚举，而是插件侧的业务分类字段。
+- 参考了 `openclaw-otel-plugin` 的 span 分类语义，但 Hermes 当前直接使用显式 tag 输出，方便产品侧统一筛选。
 
 - `usage_total_tokens = usage_input_tokens + usage_output_tokens`
 - cache token 不并入 `usage_total_tokens`

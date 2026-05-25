@@ -70,27 +70,83 @@ Metrics 描述见：[docs/zh/metrics.md](docs/zh/metrics.md)
 
 当 `logs_enabled=true` 时，插件会把 session、API request、tool、subagent 的关键生命周期事件镜像到 OTEL logs。
 
-## 安装位置
+## 安装
 
-本仓库目标目录：
+现在推荐改成和 `openclaw-otel-plugin` 接近的“发布包 + 安装脚本”方式，而不是手工建软链。
+
+### 本地发布包快速安装
+
+如果你已经在本机仓库里：
+
+```bash
+python3 scripts/release.py
+bash output/install.sh output/hermes-otel-plugin.tar.gz \
+  --type otlp \
+  --endpoint http://127.0.0.1:9529/otel
+```
+
+如果是 GTrace：
+
+```bash
+python3 scripts/release.py
+bash output/install.sh output/hermes-otel-plugin.tar.gz \
+  --type gtrace \
+  --endpoint https://llm-openway.guance.com \
+  --x-token <TOKEN>
+```
+
+安装脚本会自动：
+
+- 安装到 `~/.hermes/plugins/hermes-otel-plugin`
+- 把运行时依赖安装到 Hermes 自己的 Python 环境
+- 在 `~/.hermes/config.yaml` 里启用插件
+- 写入 `hermes_otel_plugin` 配置段
+- 最后 best-effort 执行一次 `hermes gateway restart`
+
+常用参数：
+
+- `--no-config`
+- `--no-deps`
+- `--no-restart`
+- `--tag KEY=VALUE`
+- `--service-name NAME`
+
+### 从发布地址安装
+
+安装脚本也支持和 `openclaw-otel-plugin` 类似的 latest / version 模式：
+
+```bash
+OSS_ENDPOINT=https://example.com \
+bash scripts/install.sh latest \
+  --type gtrace \
+  --endpoint https://llm-openway.guance.com \
+  --x-token <TOKEN>
+```
+
+或者：
+
+```bash
+OSS_ENDPOINT=https://example.com \
+bash scripts/install.sh v0.1.0 \
+  --type otlp \
+  --endpoint http://127.0.0.1:9529/otel
+```
+
+脚本会在需要时自动把 `OSS_ENDPOINT` 补成 `/hermes-otel-plugin` 目录。
+
+### 源码安装
+
+如果你是在开发插件，也仍然可以保留源码软链方式：
 
 ```text
-/home/liurui/code/hermes-otel-plugin
+~/.hermes/plugins/hermes-otel-plugin -> /path/to/hermes-otel-plugin
 ```
 
-Hermes 用户插件发现路径建议保持为：
+这时需要你手动保证：
 
-```text
-~/.hermes/plugins/hermes-otel-plugin -> /home/liurui/code/hermes-otel-plugin
-```
-
-并在 `~/.hermes/config.yaml` 中启用：
-
-```yaml
-plugins:
-  enabled:
-    - hermes-otel-plugin
-```
+- `plugins.enabled` 中包含 `hermes-otel-plugin`
+- `hermes_otel_plugin.enabled=true`
+- Hermes 运行时 Python 环境中已经安装依赖
 
 ## 配置
 

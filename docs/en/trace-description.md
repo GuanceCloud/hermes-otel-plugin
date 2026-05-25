@@ -26,6 +26,44 @@ Therefore:
 - `agent_run` is the span closest to agent execution
 - Multiple `llm`, `tool:*`, `skill:*`, and `subagent:*` spans together form one agent run
 
+## Terminology
+
+### `session`
+
+- A `session` is the container for one continuous conversation
+- Multiple messages are stored in order under one `session_id`
+- One `session` may contain multiple user turns
+- A new `session_id` is only created when Hermes explicitly starts a new session, resumes another session, auto-resets, or performs a compression split
+
+### `turn`
+
+- A `turn` is one complete processing cycle triggered by one new user input inside a session
+- A turn usually starts from one `role=user` message
+- It is followed by the messages produced for that turn, such as `assistant`, `tool`, and the final `assistant`
+- The next new `role=user` message marks the start of the next turn
+
+Additional notes:
+
+- Hermes does not currently persist a standalone `turn_id`
+- In practice, a turn is identified from the `role=user` boundaries in the message sequence
+- In `hermes-otel-plugin`, one turn maps to one trace by default
+
+### `message`
+
+- A `message` is the smallest persisted unit inside a session
+- Common roles include:
+  - `user`
+  - `assistant`
+  - `tool`
+- A `message` is not the same as a `turn`
+- One turn usually produces multiple messages
+
+### `llm call`
+
+- An `llm call` is one real model request
+- One turn may contain multiple `llm calls`
+- Each `llm call` maps to one `llm` span in the trace
+
 ## Final Span Model
 
 ### Retained Spans
@@ -240,6 +278,7 @@ Usage guidance:
 | attribute | description |
 | --- | --- |
 | `agent_runtime` | Current runtime, fixed to `hermes` |
+| `span_kind` | Span classification field. Current values are `request`, `agent`, `llm`, `tool`, `skill`, and `subagent` |
 | `session_id` | Current Hermes session id |
 | `platform` | Platform such as `cli` |
 | `final_status` | Final request state |
@@ -386,6 +425,26 @@ These fields exist in OpenClaw, but Hermes cannot reliably provide them from cur
 | `output_length` | Child-agent output length |
 
 ## Token Accounting Rules
+
+## Span Kind Mapping
+
+`span_kind` is used as a stable business-level span classification field so the product can filter, group, and render spans consistently.
+
+Current Hermes mapping:
+
+| span resource | span_kind |
+| --- | --- |
+| `hermes_request` | `request` |
+| `agent_run` | `agent` |
+| `llm` | `llm` |
+| `tool:*` | `tool` |
+| `skill:*` | `skill` |
+| `subagent:*` | `subagent` |
+
+Notes:
+
+- This is not the OpenTelemetry native `SpanKind` enum. It is a plugin-level business classification tag.
+- The mapping follows the span categorization semantics used in `openclaw-otel-plugin`, but Hermes emits it explicitly as a trace tag for easier product-side filtering.
 
 - `usage_total_tokens = usage_input_tokens + usage_output_tokens`
 - Cache tokens are not merged into `usage_total_tokens`

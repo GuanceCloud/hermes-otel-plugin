@@ -43,6 +43,23 @@ def _tool_call_preview(tool_names: list[str]) -> str | None:
     return _clip(f"toolCall:{','.join(normalized)}", limit=1200)
 
 
+def _resolve_span_kind(resource_name: str) -> str:
+    normalized = str(resource_name or "").strip().lower()
+    if normalized == "hermes_request":
+        return "request"
+    if normalized == "agent_run":
+        return "agent"
+    if normalized == "llm":
+        return "llm"
+    if normalized.startswith("tool:"):
+        return "tool"
+    if normalized.startswith("skill:"):
+        return "skill"
+    if normalized.startswith("subagent:"):
+        return "subagent"
+    return "internal"
+
+
 def _detect_turn_classification(user_message: str) -> dict[str, Any]:
     normalized = str(user_message or "").strip().lower()
     if not normalized:
@@ -322,6 +339,7 @@ class TraceManager:
     ) -> dict[str, Any]:
         return {
             "agent_runtime": "hermes",
+            "span_kind": _resolve_span_kind("hermes_request"),
             "session_id": session_id,
             "platform": platform,
             "request_model": model,
@@ -365,6 +383,7 @@ class TraceManager:
             agent_span,
             {
                 "agent_runtime": "hermes",
+                "span_kind": _resolve_span_kind("agent_run"),
                 "session_id": session_id,
                 "platform": platform,
                 "request_model": model,
@@ -500,6 +519,7 @@ class TraceManager:
         )
         attrs = {
             "agent_runtime": "hermes",
+            "span_kind": _resolve_span_kind("llm"),
             "session_id": session_id,
             "platform": platform,
             "provider_name": provider,
@@ -667,6 +687,7 @@ class TraceManager:
         )
         attrs = {
             "agent_runtime": "hermes",
+            "span_kind": _resolve_span_kind(f"tool:{tool_name}"),
             "session_id": resolved_session_id,
             "platform": turn.platform,
             "tool_name": tool_name,
@@ -828,6 +849,7 @@ class TraceManager:
             span,
             {
                 "agent_runtime": "hermes",
+                "span_kind": _resolve_span_kind(f"skill:{skill_name}"),
                 "session_id": turn.session_id,
                 "platform": turn.platform,
                 "skill_name": skill_name,
@@ -913,6 +935,7 @@ class TraceManager:
             span,
             {
                 "agent_runtime": "hermes",
+                "span_kind": _resolve_span_kind(f"subagent:{display_role}"),
                 "session_id": parent_session_id,
                 "subagent_role": display_role,
                 "subagent_runtime_role": runtime_role if runtime_role != display_role else None,
