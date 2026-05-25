@@ -375,6 +375,22 @@ restart_gateway_best_effort() {
     return
   fi
 
+  log "restarting Hermes gateway"
+  if command -v timeout >/dev/null 2>&1; then
+    if timeout 10s hermes gateway restart >/dev/null 2>&1; then
+      log "restarted Hermes gateway"
+    else
+      local status="$?"
+      if [ "$status" -eq 124 ]; then
+        log "gateway restart timed out after 10s; restart manually with: hermes gateway restart"
+      else
+        log "gateway restart failed or requires higher privileges; restart manually with: hermes gateway restart"
+      fi
+    fi
+    return
+  fi
+
+  log "timeout command was not found, restarting without timeout"
   if hermes gateway restart >/dev/null 2>&1; then
     log "restarted Hermes gateway"
   else
