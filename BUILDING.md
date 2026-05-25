@@ -41,6 +41,27 @@ The versioned archive is immutable release output.
 
 The installer is the primary operational entrypoint for end users.
 
+## GitHub Actions
+
+The repository now includes a GitHub Actions workflow at:
+
+- `.github/workflows/release.yml`
+
+Behavior:
+
+- Pull requests and pushes to `main` run unit tests, `python -m build`, and `python scripts/release.py`
+- The workflow uploads `dist/` and `output/` as workflow artifacts
+- Pushing a tag like `v0.1.0` also creates a GitHub Release and attaches:
+  - `dist/*.whl`
+  - `dist/*.tar.gz`
+  - `output/*.tar.gz`
+  - `output/*.sha256`
+  - `output/install.sh`
+
+Tagging rule:
+
+- Git tag `vX.Y.Z` must match `pyproject.toml` `project.version`
+
 ## Manual Validation
 
 1. Confirm the plugin is discoverable:

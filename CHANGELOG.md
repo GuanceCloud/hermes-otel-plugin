@@ -9,3 +9,4 @@
 - Added release packaging output with versioned archive, latest archive, sha256 files, and installer sidecar.
 - Added `scripts/install.sh` to install the plugin, install runtime dependencies into Hermes Python, update `~/.hermes/config.yaml`, and best-effort restart the gateway.
 - Updated README and BUILDING to make the release installer the primary installation path and keep source linking as a development-only fallback.
+- Added GitHub Actions to run tests, build Python distribution artifacts, generate release bundles, and publish tagged GitHub Releases automatically.
