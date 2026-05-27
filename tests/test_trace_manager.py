@@ -6,6 +6,7 @@ from unittest.mock import patch
 from src.config import HermesOtelPluginConfig
 from src.log_manager import LogManager
 from src.metric_manager import MetricManager
+from src.state_store import SessionMetadata
 from src.trace_manager import TraceManager
 
 
@@ -118,6 +119,14 @@ class FakeLineage:
         return bool(self.get_parent_session_id(session_id))
 
 
+class FakeSessionMetadataResolver:
+    def __init__(self, items=None) -> None:
+        self.items = items or {}
+
+    def get_metadata(self, session_id):
+        return self.items.get(session_id)
+
+
 class TraceManagerTests(unittest.TestCase):
     def setUp(self) -> None:
         config = HermesOtelPluginConfig(logs_enabled=True)
@@ -125,7 +134,15 @@ class TraceManagerTests(unittest.TestCase):
         metrics = MetricManager(runtime)
         logs = LogManager(runtime, config)
         self.lineage = FakeLineage()
-        self.manager = TraceManager(runtime, metrics, logs, config, lineage=self.lineage)
+        self.session_metadata = FakeSessionMetadataResolver()
+        self.manager = TraceManager(
+            runtime,
+            metrics,
+            logs,
+            config,
+            lineage=self.lineage,
+            session_metadata=self.session_metadata,
+        )
         self.runtime = runtime
 
     def test_turn_api_and_tool_flow(self) -> None:
@@ -250,6 +267,42 @@ class TraceManagerTests(unittest.TestCase):
         token_usage_calls = self.manager._metrics._token_usage.calls
         total_call = next(call for call in token_usage_calls if call[2]["token_type"] == "total")
         self.assertEqual(total_call[1], 13.0)
+
+    def test_session_metadata_fields_are_attached_to_root_and_agent_spans(self) -> None:
+        self.session_metadata.items["sess-meta"] = SessionMetadata(
+            session_id="sess-meta",
+            session_key="agent:main:telegram:group:chat-1:thread-2:user-3",
+            session_namespace="agent",
+            session_agent="main",
+            session_channel="telegram",
+            session_scope="group",
+            session_channel_target="chat-1:thread-2:user-3",
+            session_create_at="2026-05-27T15:00:00+08:00",
+            session_updated_at="2026-05-27T15:05:00+08:00",
+            session_chat_type="group",
+            session_file="/tmp/sess-meta.jsonl",
+        )
+        self.manager.start_turn(
+            session_id="sess-meta",
+            user_message="hello",
+            conversation_history=[],
+            is_first_turn=True,
+            model="gpt-test",
+            platform="telegram",
+        )
+        root_span = next(span for span in self.runtime.spans if span.name == "hermes_request")
+        agent_span = next(span for span in self.runtime.spans if span.name == "agent_run")
+        for span in (root_span, agent_span):
+            self.assertEqual(span.attributes["session_key"], "agent:main:telegram:group:chat-1:thread-2:user-3")
+            self.assertEqual(span.attributes["session_namespace"], "agent")
+            self.assertEqual(span.attributes["session_agent"], "main")
+            self.assertEqual(span.attributes["session_channel"], "telegram")
+            self.assertEqual(span.attributes["session_scope"], "group")
+            self.assertEqual(span.attributes["session_channel_target"], "chat-1:thread-2:user-3")
+            self.assertEqual(span.attributes["session_create_at"], "2026-05-27T15:00:00+08:00")
+            self.assertEqual(span.attributes["session_updated_at"], "2026-05-27T15:05:00+08:00")
+            self.assertEqual(span.attributes["session_chat_type"], "group")
+            self.assertEqual(span.attributes["session_file"], "/tmp/sess-meta.jsonl")
 
     def test_llm_previews_are_synthesized_without_host_changes(self) -> None:
         self.manager.start_turn(

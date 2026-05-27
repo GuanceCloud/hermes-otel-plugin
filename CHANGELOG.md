@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- Added session metadata export on `hermes_request` and `agent_run`, including `session_key`, structured `session_*` derived fields, gateway timestamps, chat type, and legacy transcript path.
+- Updated Chinese and English trace documentation to describe the new session metadata fields and clarify the current `session_file` and `session_cwd` boundaries.
+
 ## 0.1.0
 
 - Initialized `hermes-otel-plugin` as a native Hermes Python plugin.

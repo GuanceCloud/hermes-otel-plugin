@@ -9,7 +9,14 @@ from .config import HermesOtelPluginConfig
 from .log_manager import LogManager
 from .metric_manager import MetricManager
 from .otel_runtime import OTelRuntime
-from .state_store import ActiveSpanState, PendingLlmState, SessionLineageResolver, TurnState, TurnStore
+from .state_store import (
+    ActiveSpanState,
+    PendingLlmState,
+    SessionLineageResolver,
+    SessionMetadataResolver,
+    TurnState,
+    TurnStore,
+)
 
 
 def _clip(value: Any, limit: int = 240) -> str | None:
@@ -279,6 +286,7 @@ class TraceManager:
         config: HermesOtelPluginConfig,
         logger: logging.Logger | None = None,
         lineage: SessionLineageResolver | None = None,
+        session_metadata: SessionMetadataResolver | None = None,
     ) -> None:
         self._runtime = runtime
         self._metrics = metrics
@@ -287,6 +295,7 @@ class TraceManager:
         self._logger = logger or logging.getLogger(__name__)
         self._store = TurnStore()
         self._lineage = lineage or SessionLineageResolver()
+        self._session_metadata = session_metadata or SessionMetadataResolver()
 
     def is_child_session(self, session_id: str | None) -> bool:
         return self._lineage.is_child_session(session_id)
@@ -330,24 +339,31 @@ class TraceManager:
 
     def _turn_attrs(
         self,
-        session_id: str,
-        platform: str,
-        model: str,
-        user_message: str,
-        conversation_length: int,
-        is_first_turn: bool,
+        turn: TurnState,
     ) -> dict[str, Any]:
         return {
             "agent_runtime": "hermes",
             "span_kind": _resolve_span_kind("hermes_request"),
-            "session_id": session_id,
-            "platform": platform,
-            "request_model": model,
-            "input_length": len(user_message or ""),
-            "input_preview": _clip(user_message),
-            "conversation_length": conversation_length,
-            "is_first_turn": bool(is_first_turn),
-            **_detect_turn_classification(user_message),
+            "session_id": turn.session_id,
+            "session_key": turn.session_key,
+            "session_namespace": turn.session_namespace,
+            "session_agent": turn.session_agent,
+            "session_channel": turn.session_channel,
+            "session_scope": turn.session_scope,
+            "session_channel_target": turn.session_channel_target,
+            "session_create_at": turn.session_create_at,
+            "session_updated_at": turn.session_updated_at,
+            "session_chat_type": turn.session_chat_type,
+            "session_file": turn.session_file,
+            "platform": turn.platform,
+            "request_model": turn.model,
+            "input_length": len(turn.user_message or ""),
+            "input_preview": _clip(turn.user_message),
+            "conversation_length": turn.conversation_length,
+            "is_first_turn": bool(turn.is_first_turn),
+            "request_type": turn.request_type,
+            "is_auto_review": turn.is_auto_review,
+            "review_category": turn.review_category,
         }
 
     def _create_turn_state(
@@ -362,17 +378,37 @@ class TraceManager:
         started_at_ns = _wall_ns()
         started_monotonic_ns = _mono_ns()
         classification = _detect_turn_classification(user_message)
+        metadata = self._session_metadata.get_metadata(session_id)
+        turn = TurnState(
+            session_id=session_id,
+            platform=platform,
+            model=model,
+            user_message=user_message,
+            conversation_length=len(conversation_history),
+            is_first_turn=is_first_turn,
+            root_span=None,
+            agent_span=None,
+            started_at_ns=started_at_ns,
+            started_monotonic_ns=started_monotonic_ns,
+            last_activity_monotonic_ns=started_monotonic_ns,
+            request_type=str(classification.get("request_type") or "user_request"),
+            is_auto_review=bool(classification.get("is_auto_review")),
+            review_category=classification.get("review_category"),
+            session_key=metadata.session_key if metadata else None,
+            session_namespace=metadata.session_namespace if metadata else None,
+            session_agent=metadata.session_agent if metadata else None,
+            session_channel=metadata.session_channel if metadata else None,
+            session_scope=metadata.session_scope if metadata else None,
+            session_channel_target=metadata.session_channel_target if metadata else None,
+            session_create_at=metadata.session_create_at if metadata else None,
+            session_updated_at=metadata.session_updated_at if metadata else None,
+            session_chat_type=metadata.session_chat_type if metadata else None,
+            session_file=metadata.session_file if metadata else None,
+        )
         root_span = self._runtime.start_span("hermes_request", start_time_ns=started_at_ns)
         self._runtime.set_span_attributes(
             root_span,
-            self._turn_attrs(
-                session_id=session_id,
-                platform=platform,
-                model=model,
-                user_message=user_message,
-                conversation_length=len(conversation_history),
-                is_first_turn=is_first_turn,
-            ),
+            self._turn_attrs(turn),
         )
         agent_span = self._runtime.start_span(
             "agent_run",
@@ -385,27 +421,24 @@ class TraceManager:
                 "agent_runtime": "hermes",
                 "span_kind": _resolve_span_kind("agent_run"),
                 "session_id": session_id,
+                "session_key": turn.session_key,
+                "session_namespace": turn.session_namespace,
+                "session_agent": turn.session_agent,
+                "session_channel": turn.session_channel,
+                "session_scope": turn.session_scope,
+                "session_channel_target": turn.session_channel_target,
+                "session_create_at": turn.session_create_at,
+                "session_updated_at": turn.session_updated_at,
+                "session_chat_type": turn.session_chat_type,
+                "session_file": turn.session_file,
                 "platform": platform,
                 "request_model": model,
                 **classification,
             },
         )
-        return TurnState(
-            session_id=session_id,
-            platform=platform,
-            model=model,
-            user_message=user_message,
-            conversation_length=len(conversation_history),
-            is_first_turn=is_first_turn,
-            root_span=root_span,
-            agent_span=agent_span,
-            started_at_ns=started_at_ns,
-            started_monotonic_ns=started_monotonic_ns,
-            last_activity_monotonic_ns=started_monotonic_ns,
-            request_type=str(classification.get("request_type") or "user_request"),
-            is_auto_review=bool(classification.get("is_auto_review")),
-            review_category=classification.get("review_category"),
-        )
+        turn.root_span = root_span
+        turn.agent_span = agent_span
+        return turn
 
     def _ensure_turn(
         self,

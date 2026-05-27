@@ -108,6 +108,8 @@
 - 表示从消息进入 Hermes 到本轮处理完成的总窗口
 - 承载整轮请求级汇总信息，例如：
   - `session_id`
+  - `session_key`
+  - `session_chat_type`
   - `final_status`
   - `provider_name`
   - `response_model`
@@ -123,9 +125,34 @@
 - 作为 `hermes_request` 下的主执行 span
 - 承载本轮所有 `llm`、`tool:*`、`skill:*`、`subagent:*` 的父级上下文
 - 汇总本轮 agent 执行维度的信息，例如：
+  - session 关联字段
   - 本轮最终状态
   - 汇总 token
   - 最终输出预览
+
+## Session Metadata
+
+以下字段当前会写到 `hermes_request` 和 `agent_run`：
+
+| 字段 | 含义 |
+| --- | --- |
+| `session_id` | 当前 Hermes session id，推荐作为 trace 与 metrics 的基础关联字段 |
+| `session_key` | Hermes gateway 生成的 session key |
+| `session_namespace` | 从 `session_key` 结构化提取，当前默认值通常为 `agent` |
+| `session_agent` | 从 `session_key` 结构化提取，当前默认值通常为 `main` |
+| `session_channel` | 从 `session_key` 结构化提取，对应 Hermes platform，例如 `telegram`、`discord`、`slack` |
+| `session_scope` | 从 `session_key` 结构化提取，对应 Hermes `chat_type`，例如 `dm`、`group`、`channel`、`thread` |
+| `session_channel_target` | 从 `session_key` 尾段提取的目标范围，一般是 `chat_id`、`thread_id`、`user_id` 的组合 |
+| `session_create_at` | gateway 侧 `SessionEntry.created_at` |
+| `session_updated_at` | gateway 侧 `SessionEntry.updated_at` |
+| `session_chat_type` | gateway 侧 `chat_type` |
+| `session_file` | Hermes gateway legacy transcript 路径，当前写成 `~/.hermes/sessions/<session_id>.jsonl` |
+
+说明：
+
+- `session_namespace`、`session_agent`、`session_channel`、`session_scope`、`session_channel_target` 不是 Hermes 原生单列字段，而是插件基于 `session_key` 的结构化派生字段
+- `session_file` 当前表达的是 gateway transcript 路径，不是导出的 `session_<id>.json` 快照路径
+- `session_cwd` 当前没有稳定、统一的 Hermes session 元数据来源，因此本版本不承诺输出
 
 ### `llm`
 
