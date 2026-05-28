@@ -4,6 +4,7 @@ import logging
 import threading
 from typing import Any
 
+from . import AGENT_RUNTIME, AGENT_VERSION
 from .otel_runtime import OTelRuntime
 
 
@@ -149,7 +150,8 @@ class MetricManager:
         self._session_trace_count.add(
             1,
             _attrs(
-                agent_runtime="hermes",
+                agent_runtime=AGENT_RUNTIME,
+                agent_version=AGENT_VERSION,
                 session_id=session_id,
                 platform=platform,
                 request_model=model,
@@ -174,7 +176,8 @@ class MetricManager:
         if not self._ensure_instruments():
             return
         attrs = _attrs(
-            agent_runtime="hermes",
+            agent_runtime=AGENT_RUNTIME,
+            agent_version=AGENT_VERSION,
             session_id=session_id,
             platform=platform,
             provider_name=provider_name,
@@ -190,7 +193,8 @@ class MetricManager:
 
         numeric_usage = _token_totals(usage)
         session_token_attrs = _attrs(
-            agent_runtime="hermes",
+            agent_runtime=AGENT_RUNTIME,
+            agent_version=AGENT_VERSION,
             session_id=session_id,
             provider_name=provider_name,
             request_model=model,
@@ -221,7 +225,8 @@ class MetricManager:
         if not self._ensure_instruments():
             return
         attrs = _attrs(
-            agent_runtime="hermes",
+            agent_runtime=AGENT_RUNTIME,
+            agent_version=AGENT_VERSION,
             session_id=session_id,
             platform=platform,
             operation_name="model",
@@ -239,7 +244,8 @@ class MetricManager:
                 self._token_usage.record(
                     float(value),
                     _attrs(
-                        agent_runtime="hermes",
+                        agent_runtime=AGENT_RUNTIME,
+                        agent_version=AGENT_VERSION,
                         session_id=session_id,
                         platform=platform,
                         provider_name=provider_name,
@@ -263,7 +269,8 @@ class MetricManager:
         if not self._ensure_instruments():
             return
         runtime_attrs = _attrs(
-            agent_runtime="hermes",
+            agent_runtime=AGENT_RUNTIME,
+            agent_version=AGENT_VERSION,
             session_id=session_id,
             platform=platform,
             tool_name=tool_name,
@@ -275,7 +282,8 @@ class MetricManager:
         self._tool_call_duration.record(max(0.0, duration_ms), runtime_attrs)
 
         operation_attrs = _attrs(
-            agent_runtime="hermes",
+            agent_runtime=AGENT_RUNTIME,
+            agent_version=AGENT_VERSION,
             session_id=session_id,
             platform=platform,
             operation_name="tool",
@@ -294,7 +302,8 @@ class MetricManager:
         self._skill_activation_count.add(
             1,
             _attrs(
-                agent_runtime="hermes",
+                agent_runtime=AGENT_RUNTIME,
+                agent_version=AGENT_VERSION,
                 session_id=session_id,
                 skill_name=skill_name,
                 skill_source=skill_source,
@@ -312,7 +321,8 @@ class MetricManager:
         if not self._ensure_instruments():
             return
         attrs = _attrs(
-            agent_runtime="hermes",
+            agent_runtime=AGENT_RUNTIME,
+            agent_version=AGENT_VERSION,
             session_id=session_id,
             operation_name="skill",
             skill_name=skill_name,
@@ -332,7 +342,8 @@ class MetricManager:
         if not self._ensure_instruments():
             return
         attrs = _attrs(
-            agent_runtime="hermes",
+            agent_runtime=AGENT_RUNTIME,
+            agent_version=AGENT_VERSION,
             session_id=session_id,
             subagent_role=child_role,
             outcome=outcome,
@@ -348,7 +359,7 @@ class MetricManager:
             return
         self._session_start_count.add(
             1,
-            _attrs(agent_runtime="hermes", session_id=session_id, platform=platform),
+            _attrs(agent_runtime=AGENT_RUNTIME, agent_version=AGENT_VERSION, session_id=session_id, platform=platform),
         )
 
     def record_session_end(self, session_id: str, platform: str, outcome: str) -> None:
@@ -357,7 +368,8 @@ class MetricManager:
         self._session_end_count.add(
             1,
             _attrs(
-                agent_runtime="hermes",
+                agent_runtime=AGENT_RUNTIME,
+                agent_version=AGENT_VERSION,
                 session_id=session_id,
                 platform=platform,
                 outcome=outcome,
@@ -369,7 +381,7 @@ class MetricManager:
             return
         self._session_reset_count.add(
             1,
-            _attrs(agent_runtime="hermes", session_id=session_id, platform=platform),
+            _attrs(agent_runtime=AGENT_RUNTIME, agent_version=AGENT_VERSION, session_id=session_id, platform=platform),
         )
 
     def record_interrupted_turn(self, session_id: str, platform: str) -> None:
@@ -377,5 +389,5 @@ class MetricManager:
             return
         self._turn_interrupted_count.add(
             1,
-            _attrs(agent_runtime="hermes", session_id=session_id, platform=platform),
+            _attrs(agent_runtime=AGENT_RUNTIME, agent_version=AGENT_VERSION, session_id=session_id, platform=platform),
         )

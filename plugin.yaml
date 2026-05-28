@@ -1,5 +1,5 @@
 name: hermes-otel-plugin
-version: 0.1.1
+version: 0.1.2
 description: Export Hermes session, model, tool, and subagent telemetry to OTLP over HTTP/protobuf.
 author: OpenAI Codex
 kind: standalone

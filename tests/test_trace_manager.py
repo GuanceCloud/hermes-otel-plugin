@@ -6,6 +6,7 @@ from unittest.mock import patch
 from src.config import HermesOtelPluginConfig
 from src.log_manager import LogManager
 from src.metric_manager import MetricManager
+from src import AGENT_RUNTIME, AGENT_VERSION
 from src.state_store import SessionMetadata
 from src.trace_manager import TraceManager
 
@@ -222,12 +223,20 @@ class TraceManagerTests(unittest.TestCase):
         agent_span = next(span for span in self.runtime.spans if span.name == "agent_run")
         self.assertEqual(root_span.attributes["span_kind"], "request")
         self.assertEqual(agent_span.attributes["span_kind"], "agent")
+        self.assertEqual(root_span.attributes["agent_runtime"], AGENT_RUNTIME)
+        self.assertEqual(agent_span.attributes["agent_runtime"], AGENT_RUNTIME)
+        self.assertEqual(root_span.attributes["agent_version"], AGENT_VERSION)
+        self.assertEqual(agent_span.attributes["agent_version"], AGENT_VERSION)
         self.assertEqual(root_span.attributes["output_preview"], "done")
         self.assertEqual(root_span.attributes["usage_input_tokens"], 10)
         self.assertEqual(root_span.attributes["usage_output_tokens"], 3)
         self.assertEqual(root_span.attributes["usage_total_tokens"], 13)
         tool_span = next(span for span in self.runtime.spans if span.name == "tool:terminal")
         self.assertEqual(llm_span.attributes["span_kind"], "llm")
+        self.assertEqual(llm_span.attributes["agent_runtime"], AGENT_RUNTIME)
+        self.assertEqual(tool_span.attributes["agent_runtime"], AGENT_RUNTIME)
+        self.assertEqual(llm_span.attributes["agent_version"], AGENT_VERSION)
+        self.assertEqual(tool_span.attributes["agent_version"], AGENT_VERSION)
         self.assertEqual(tool_span.attributes["span_kind"], "tool")
         self.assertEqual(tool_span.attributes["tool_phase"], "result")
         self.assertEqual(tool_span.attributes["tool_outcome"], "completed")
@@ -294,6 +303,8 @@ class TraceManagerTests(unittest.TestCase):
         agent_span = next(span for span in self.runtime.spans if span.name == "agent_run")
         for span in (root_span, agent_span):
             self.assertEqual(span.attributes["session_key"], "agent:main:telegram:group:chat-1:thread-2:user-3")
+            self.assertEqual(span.attributes["agent_runtime"], AGENT_RUNTIME)
+            self.assertEqual(span.attributes["agent_version"], AGENT_VERSION)
             self.assertEqual(span.attributes["session_namespace"], "agent")
             self.assertEqual(span.attributes["session_agent"], "main")
             self.assertEqual(span.attributes["session_channel"], "telegram")
@@ -612,6 +623,8 @@ class TraceManagerTests(unittest.TestCase):
         self.assertEqual(subagent_span.attributes["span_kind"], "subagent")
         self.assertEqual(subagent_span.attributes["subagent_role"], "coder")
         self.assertEqual(subagent_span.attributes["subagent_runtime_role"], "leaf")
+        self.assertEqual(subagent_span.attributes["agent_runtime"], AGENT_RUNTIME)
+        self.assertEqual(subagent_span.attributes["agent_version"], AGENT_VERSION)
 
     def test_active_turn_does_not_expire_based_on_total_duration(self) -> None:
         self.manager._config.root_span_ttl_ms = 1_000

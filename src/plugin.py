@@ -4,6 +4,7 @@ import logging
 import threading
 from typing import Any
 
+from . import AGENT_RUNTIME, AGENT_VERSION
 from .cli import print_json, setup_cli_parser
 from .config import load_plugin_config, resolve_otlp_url
 from .log_manager import LogManager
@@ -75,7 +76,8 @@ class HermesOtelPlugin:
         self._runtime.set_span_attributes(
             span,
             {
-                "agent_runtime": "hermes",
+                "agent_runtime": AGENT_RUNTIME,
+                "agent_version": AGENT_VERSION,
                 "session_id": "test-session",
                 "platform": "cli",
             },
@@ -97,7 +99,8 @@ class HermesOtelPlugin:
             "session",
             "Hermes OTel plugin test export",
             {
-                "agent_runtime": "hermes",
+                "agent_runtime": AGENT_RUNTIME,
+                "agent_version": AGENT_VERSION,
                 "session_id": "test-session",
                 "platform": "cli",
                 "outcome": "completed",

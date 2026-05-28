@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from . import AGENT_RUNTIME, AGENT_VERSION
 from .config import HermesOtelPluginConfig
 from .otel_runtime import OTelRuntime
 
@@ -34,7 +35,8 @@ class LogManager:
             "session",
             body,
             {
-                "agent_runtime": "hermes",
+                "agent_runtime": AGENT_RUNTIME,
+                "agent_version": AGENT_VERSION,
                 "session_id": session_id,
                 "platform": platform,
                 "outcome": outcome,
@@ -42,10 +44,10 @@ class LogManager:
         )
 
     def emit_api_request(self, body: str, attrs: dict[str, Any]) -> None:
-        self.emit("api_request", body, {"agent_runtime": "hermes", **attrs})
+        self.emit("api_request", body, {"agent_runtime": AGENT_RUNTIME, "agent_version": AGENT_VERSION, **attrs})
 
     def emit_tool(self, body: str, attrs: dict[str, Any]) -> None:
-        self.emit("tool", body, {"agent_runtime": "hermes", **attrs})
+        self.emit("tool", body, {"agent_runtime": AGENT_RUNTIME, "agent_version": AGENT_VERSION, **attrs})
 
     def emit_subagent(self, body: str, attrs: dict[str, Any]) -> None:
-        self.emit("subagent", body, {"agent_runtime": "hermes", **attrs})
+        self.emit("subagent", body, {"agent_runtime": AGENT_RUNTIME, "agent_version": AGENT_VERSION, **attrs})

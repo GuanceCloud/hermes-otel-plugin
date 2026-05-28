@@ -5,6 +5,7 @@ import logging
 import time
 from typing import Any
 
+from . import AGENT_RUNTIME, AGENT_VERSION
 from .config import HermesOtelPluginConfig
 from .log_manager import LogManager
 from .metric_manager import MetricManager
@@ -342,7 +343,8 @@ class TraceManager:
         turn: TurnState,
     ) -> dict[str, Any]:
         return {
-            "agent_runtime": "hermes",
+            "agent_runtime": AGENT_RUNTIME,
+            "agent_version": AGENT_VERSION,
             "span_kind": _resolve_span_kind("hermes_request"),
             "session_id": turn.session_id,
             "session_key": turn.session_key,
@@ -418,7 +420,8 @@ class TraceManager:
         self._runtime.set_span_attributes(
             agent_span,
             {
-                "agent_runtime": "hermes",
+                "agent_runtime": AGENT_RUNTIME,
+                "agent_version": AGENT_VERSION,
                 "span_kind": _resolve_span_kind("agent_run"),
                 "session_id": session_id,
                 "session_key": turn.session_key,
@@ -551,7 +554,8 @@ class TraceManager:
             start_time_ns=started_at_ns,
         )
         attrs = {
-            "agent_runtime": "hermes",
+            "agent_runtime": AGENT_RUNTIME,
+            "agent_version": AGENT_VERSION,
             "span_kind": _resolve_span_kind("llm"),
             "session_id": session_id,
             "platform": platform,
@@ -719,7 +723,8 @@ class TraceManager:
             start_time_ns=started_at_ns,
         )
         attrs = {
-            "agent_runtime": "hermes",
+            "agent_runtime": AGENT_RUNTIME,
+            "agent_version": AGENT_VERSION,
             "span_kind": _resolve_span_kind(f"tool:{tool_name}"),
             "session_id": resolved_session_id,
             "platform": turn.platform,
@@ -881,7 +886,8 @@ class TraceManager:
         self._runtime.set_span_attributes(
             span,
             {
-                "agent_runtime": "hermes",
+                "agent_runtime": AGENT_RUNTIME,
+                "agent_version": AGENT_VERSION,
                 "span_kind": _resolve_span_kind(f"skill:{skill_name}"),
                 "session_id": turn.session_id,
                 "platform": turn.platform,
@@ -967,7 +973,8 @@ class TraceManager:
         self._runtime.set_span_attributes(
             span,
             {
-                "agent_runtime": "hermes",
+                "agent_runtime": AGENT_RUNTIME,
+                "agent_version": AGENT_VERSION,
                 "span_kind": _resolve_span_kind(f"subagent:{display_role}"),
                 "session_id": parent_session_id,
                 "subagent_role": display_role,

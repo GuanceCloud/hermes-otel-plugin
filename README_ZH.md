@@ -127,7 +127,7 @@ bash scripts/install.sh latest \
 
 ```bash
 OSS_ENDPOINT=https://example.com \
-bash scripts/install.sh v0.1.1 \
+bash scripts/install.sh v0.1.2 \
   --type otlp \
   --endpoint http://127.0.0.1:9529/otel
 ```

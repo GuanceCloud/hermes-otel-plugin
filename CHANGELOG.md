@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+- Fixed `agent_version` so it now reports the real Hermes Agent version instead of the plugin version.
+- Added runtime resolution for Hermes Agent version using `hermes_cli.__version__`, with a local source-file fallback.
+- Added regression coverage to ensure `agent_runtime=hermes` and the resolved `agent_version` are attached consistently across spans.
+
 ## 0.1.1
 
 - Added session metadata export on `hermes_request` and `agent_run`, including `session_key`, structured `session_*` derived fields, gateway timestamps, chat type, and legacy transcript path.

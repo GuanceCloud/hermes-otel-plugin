@@ -30,8 +30,8 @@ python3 scripts/release.py
 
 Release output:
 
-- `output/hermes-otel-plugin-v0.1.1.tar.gz`
-- `output/hermes-otel-plugin-v0.1.1.tar.gz.sha256`
+- `output/hermes-otel-plugin-v0.1.2.tar.gz`
+- `output/hermes-otel-plugin-v0.1.2.tar.gz.sha256`
 - `output/hermes-otel-plugin.tar.gz`
 - `output/hermes-otel-plugin.tar.gz.sha256`
 - `output/install.sh`
@@ -51,7 +51,7 @@ Behavior:
 
 - Pull requests and pushes to `main` run unit tests, `python -m build`, and `python scripts/release.py`
 - The workflow uploads `dist/` and `output/` as workflow artifacts
-- Pushing a tag like `v0.1.1` also creates a GitHub Release and attaches:
+- Pushing a tag like `v0.1.2` also creates a GitHub Release and attaches:
   - `dist/*.whl`
   - `dist/*.tar.gz`
   - `output/*.tar.gz`
