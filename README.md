@@ -116,7 +116,7 @@ Useful flags:
 The installer also supports the same latest/version pattern as `openclaw-otel-plugin`:
 
 ```bash
-OSS_ENDPOINT=https://example.com \
+OSS_ENDPOINT=https://github.com/GuanceCloud/hermes-otel-plugin/releases/download/v0.1.3 \
 bash scripts/install.sh latest \
   --type gtrace \
   --endpoint https://llm-openway.guance.com \
@@ -126,13 +126,13 @@ bash scripts/install.sh latest \
 or:
 
 ```bash
-OSS_ENDPOINT=https://example.com \
+OSS_ENDPOINT=https://github.com/GuanceCloud/hermes-otel-plugin/releases/download/v0.1.3 \
 bash scripts/install.sh v0.1.3 \
   --type otlp \
   --endpoint http://127.0.0.1:9529/otel
 ```
 
-The script automatically appends `/hermes-otel-plugin` to `OSS_ENDPOINT` when needed.
+The script automatically appends `/hermes-otel-plugin` to `OSS_ENDPOINT` for flat object-storage layouts, but it keeps GitHub Release download roots such as `.../releases/download/v0.1.3` unchanged.
 
 ### Source install
 

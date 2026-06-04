@@ -116,7 +116,7 @@ bash output/install.sh output/hermes-otel-plugin.tar.gz \
 安装脚本也支持和 `openclaw-otel-plugin` 类似的 latest / version 模式：
 
 ```bash
-OSS_ENDPOINT=https://example.com \
+OSS_ENDPOINT=https://github.com/GuanceCloud/hermes-otel-plugin/releases/download/v0.1.3 \
 bash scripts/install.sh latest \
   --type gtrace \
   --endpoint https://llm-openway.guance.com \
@@ -126,13 +126,13 @@ bash scripts/install.sh latest \
 或者：
 
 ```bash
-OSS_ENDPOINT=https://example.com \
+OSS_ENDPOINT=https://github.com/GuanceCloud/hermes-otel-plugin/releases/download/v0.1.3 \
 bash scripts/install.sh v0.1.3 \
   --type otlp \
   --endpoint http://127.0.0.1:9529/otel
 ```
 
-脚本会在需要时自动把 `OSS_ENDPOINT` 补成 `/hermes-otel-plugin` 目录。
+对于平铺对象存储目录，脚本会在需要时自动把 `OSS_ENDPOINT` 补成 `/hermes-otel-plugin`。如果传的是 GitHub Release 下载根目录，例如 `.../releases/download/v0.1.3`，脚本不会再追加这一层路径。
 
 ### 源码安装
 

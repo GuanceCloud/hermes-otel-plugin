@@ -184,6 +184,9 @@ resolve_download_base_url() {
 
   local root="${OSS_ENDPOINT%/}"
   case "$root" in
+    */releases/download/*)
+      printf '%s' "$root"
+      ;;
     */"$PLUGIN_NAME")
       printf '%s' "$root"
       ;;
