@@ -127,7 +127,7 @@ or:
 
 ```bash
 OSS_ENDPOINT=https://example.com \
-bash scripts/install.sh v0.1.2 \
+bash scripts/install.sh v0.1.3 \
   --type otlp \
   --endpoint http://127.0.0.1:9529/otel
 ```
@@ -175,6 +175,8 @@ hermes_otel_plugin:
     - tool
     - subagent
 ```
+
+`agent_runtime=hermes` is attached at span / metric / log attribute level by the plugin itself. More generally, keys that overlap with plugin-emitted telemetry attributes such as `session_id`, `platform`, `tool_name`, or `request_model` should not be placed in `resource_attributes`. The plugin now ignores those conflicting keys and only keeps resource-scoped tags there.
 
 ## Commands
 

@@ -165,6 +165,8 @@ Purpose:
   - `provider_name`
   - `request_model`
   - `response_model`
+  - `system_prompt_*`
+  - `request_payload_*`
   - `input_preview`
   - `tool_context_preview`
   - `output_preview`
@@ -174,6 +176,7 @@ Purpose:
 Additional notes:
 
 - Current Hermes host hooks do not provide the full raw prompt / response body to the plugin.
+- The plugin does add request-diagnostics fields where possible, such as `system_prompt_chars`, `system_prompt_bytes`, `system_prompt_hash`, `request_payload_chars`, `request_payload_bytes`, and `request_tool_count`.
 - Therefore `llm.output_preview` is still a plugin-side summary, not the raw provider response.
 - `llm.input_preview` is currently used only for the first model call and represents the original user input summary.
 - Later model calls use `tool_context_preview` when plugin-side tool context needs to be represented.
@@ -319,6 +322,7 @@ Usage guidance:
 | `skill_count` | Related skill count |
 | `output_preview` | Output summary |
 | `output_length` | Output length |
+| `request_user_prompt_estimated_tokens` | Rough token estimate of the user prompt for this turn. This is only attached to `hermes_request` and `agent_run`, and is intended for subtracting user content from the total input |
 
 ### Request Type
 
@@ -348,6 +352,15 @@ Additional notes:
 | --- | --- |
 | `api_mode` | Model API mode |
 | `api_call_count` | The Nth model call inside the request |
+| `system_prompt_chars` | Character count of the session-cached system prompt read from the local Hermes state DB |
+| `system_prompt_bytes` | UTF-8 byte count of the session-cached system prompt |
+| `system_prompt_hash` | Short hash of the session-cached system prompt, useful for detecting prefix changes |
+| `request_message_count` | Request message count reported by Hermes |
+| `request_tool_count` | Tool schema count attached to the request |
+| `request_payload_item_count` | Number of items in the provider-visible `messages` / `input` list |
+| `request_payload_chars` | Serialized character count of the provider-visible `messages` / `input` list |
+| `request_payload_bytes` | UTF-8 byte count of the provider-visible `messages` / `input` list |
+| `approx_input_tokens` | Hermes pre-request rough token estimate; currently it only covers the `messages` / `input` body |
 | `input_preview` | Input summary of the first model call, currently usually the user input summary |
 | `tool_context_preview` | Plugin-synthesized tool context summary for later model calls |
 | `input_length` | Input length |
@@ -478,10 +491,14 @@ Notes:
 - Cache tokens are recorded separately in `usage_cache_*`
 - If the provider returns cumulative cache counters, the plugin normalizes them into per-`llm` deltas
 - The root span and `agent_run` aggregate tokens across all `llm` spans inside the request
+- To estimate the full prompt size, use `usage_input_tokens + usage_cache_read_input_tokens + usage_cache_write_input_tokens`
 
 ## Known Boundaries
 
 - `llm.input_preview` is not the raw provider request body. It is currently the user-input summary for the first model call.
+- `system_prompt_*` comes from the cached prompt snapshot in the local Hermes `state.db`; it does not guarantee byte-for-byte equality with the final provider-side `effective_system` for every backend.
+- `request_payload_*` only covers the hook-visible `messages` / `input` body and does not include every provider-specific top-level field.
+- `approx_input_tokens` currently comes from Hermes' messages-only preflight estimate; it does not include the full system prompt / tool-schema prefix.
 - `llm.tool_context_preview` is a plugin-synthesized tool-context summary and does not represent the raw provider prompt.
 - `llm.output_preview` is not the raw provider response body. It is a plugin-side summary.
 - `usage_reasoning_tokens` is only present when Hermes or the provider already exposes it.

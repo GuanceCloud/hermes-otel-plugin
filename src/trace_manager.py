@@ -15,6 +15,7 @@ from .state_store import (
     PendingLlmState,
     SessionLineageResolver,
     SessionMetadataResolver,
+    SessionPromptResolver,
     TurnState,
     TurnStore,
 )
@@ -35,6 +36,75 @@ def _json_preview(value: Any, limit: int = 240) -> str | None:
     except Exception:
         text = str(value)
     return _clip(text, limit=limit)
+
+
+def _json_size(value: Any) -> tuple[int, int]:
+    try:
+        text = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+    except Exception:
+        text = str(value)
+    return len(text), len(text.encode("utf-8"))
+
+
+def _count_image_tokens(msg: dict[str, Any], cost_per_image: int = 1500) -> int:
+    count = 0
+    content = msg.get("content") if isinstance(msg, dict) else None
+    if isinstance(content, list):
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") in {"image", "image_url", "input_image"}:
+                count += 1
+    stashed = msg.get("_anthropic_content_blocks") if isinstance(msg, dict) else None
+    if isinstance(stashed, list):
+        for part in stashed:
+            if isinstance(part, dict) and part.get("type") == "image":
+                count += 1
+    if isinstance(content, dict) and content.get("_multimodal"):
+        inner = content.get("content")
+        if isinstance(inner, list):
+            for part in inner:
+                if isinstance(part, dict) and part.get("type") in {"image", "image_url"}:
+                    count += 1
+    return count * cost_per_image
+
+
+def _estimate_message_chars(msg: dict[str, Any]) -> int:
+    if not isinstance(msg, dict):
+        return len(str(msg))
+    shadow: dict[str, Any] = {}
+    for key, value in msg.items():
+        if key == "_anthropic_content_blocks":
+            continue
+        if key == "content":
+            if isinstance(value, list):
+                cleaned = []
+                for part in value:
+                    if isinstance(part, dict) and part.get("type") in {"image", "image_url", "input_image"}:
+                        cleaned.append({"type": part.get("type"), "image": "[stripped]"})
+                    else:
+                        cleaned.append(part)
+                shadow[key] = cleaned
+            elif isinstance(value, dict) and value.get("_multimodal"):
+                shadow[key] = value.get("text_summary", "")
+            else:
+                shadow[key] = value
+        else:
+            shadow[key] = value
+    return len(str(shadow))
+
+
+def _request_user_prompt_stats(messages: list[Any]) -> int:
+    total_chars = 0
+    image_tokens = 0
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        if str(message.get("role") or "").strip().lower() != "user":
+            continue
+        total_chars += _estimate_message_chars(message)
+        image_tokens += _count_image_tokens(message)
+    return ((total_chars + 3) // 4) + image_tokens
 
 
 def _tool_call_preview(tool_names: list[str]) -> str | None:
@@ -288,6 +358,7 @@ class TraceManager:
         logger: logging.Logger | None = None,
         lineage: SessionLineageResolver | None = None,
         session_metadata: SessionMetadataResolver | None = None,
+        session_prompt: SessionPromptResolver | None = None,
     ) -> None:
         self._runtime = runtime
         self._metrics = metrics
@@ -297,6 +368,7 @@ class TraceManager:
         self._store = TurnStore()
         self._lineage = lineage or SessionLineageResolver()
         self._session_metadata = session_metadata or SessionMetadataResolver()
+        self._session_prompt = session_prompt or SessionPromptResolver()
 
     def is_child_session(self, session_id: str | None) -> bool:
         return self._lineage.is_child_session(session_id)
@@ -538,6 +610,9 @@ class TraceManager:
         approx_input_tokens: int | None = None,
         request_char_count: int | None = None,
         max_tokens: int | None = None,
+        request_messages: list[Any] | None = None,
+        message_count: int | None = None,
+        tool_count: int | None = None,
         **_: Any,
     ) -> None:
         if self.is_child_session(session_id):
@@ -565,9 +640,29 @@ class TraceManager:
             "api_call_count": api_call_count,
             "input_length": request_char_count,
             "max_tokens": max_tokens,
+            "request_message_count": message_count,
+            "request_tool_count": tool_count,
             "skill_count": len(active_skill_names) or None,
             "skills": ",".join(active_skill_names) if active_skill_names else None,
         }
+        if request_messages is not None:
+            payload_chars, payload_bytes = _json_size(request_messages)
+            attrs["request_payload_item_count"] = len(request_messages)
+            attrs["request_payload_chars"] = payload_chars
+            attrs["request_payload_bytes"] = payload_bytes
+            if turn.request_user_prompt_estimated_tokens is None:
+                user_prompt_tokens = _request_user_prompt_stats(request_messages)
+                turn.request_user_prompt_estimated_tokens = user_prompt_tokens
+                parent_attrs = {
+                    "request_user_prompt_estimated_tokens": user_prompt_tokens,
+                }
+                self._runtime.set_span_attributes(turn.root_span, parent_attrs)
+                self._runtime.set_span_attributes(turn.agent_span, parent_attrs)
+        prompt_diagnostics = self._session_prompt.get_prompt_diagnostics(session_id)
+        if prompt_diagnostics is not None:
+            attrs["system_prompt_chars"] = prompt_diagnostics.system_prompt_chars
+            attrs["system_prompt_bytes"] = prompt_diagnostics.system_prompt_bytes
+            attrs["system_prompt_hash"] = prompt_diagnostics.system_prompt_hash
         if api_call_count == 1:
             attrs["input_preview"] = _clip(turn.user_message, limit=1200)
         tool_context_preview = self._derive_llm_tool_context_preview(turn)

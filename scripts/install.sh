@@ -259,6 +259,7 @@ install_python_dependencies() {
   fi
 
   "$HERMES_PYTHON" - "$PLUGIN_DIR" <<'PY'
+import importlib.util
 import pathlib
 import subprocess
 import sys
@@ -269,6 +270,14 @@ pyproject = plugin_dir / "pyproject.toml"
 data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
 deps = list(data.get("project", {}).get("dependencies", []) or [])
 if deps:
+    if importlib.util.find_spec("pip") is None:
+        try:
+            subprocess.check_call([sys.executable, "-m", "ensurepip", "--upgrade"])
+        except Exception as exc:
+            raise SystemExit(
+                "[install] Hermes python does not have pip and ensurepip bootstrap failed: "
+                f"{exc}"
+            )
     subprocess.check_call(
         [
             sys.executable,
@@ -325,6 +334,49 @@ x_token = os.environ.get("HERMES_PLUGIN_X_TOKEN_RUNTIME", "")
 service_name = os.environ.get("HERMES_PLUGIN_SERVICE_NAME_RUNTIME", "")
 tags = yaml.safe_load(os.environ.get("HERMES_PLUGIN_TAGS_RUNTIME", "[]")) or []
 plugin_id = "hermes-otel-plugin"
+reserved_exact = {
+    "agent_runtime",
+    "agent_version",
+    "api_call_count",
+    "api_mode",
+    "assistant_tool_call_count",
+    "conversation_length",
+    "final_status",
+    "finish_reason",
+    "input_length",
+    "input_preview",
+    "is_auto_review",
+    "is_first_turn",
+    "log_category",
+    "max_tokens",
+    "model_name",
+    "operation_name",
+    "outcome",
+    "output_length",
+    "output_preview",
+    "platform",
+    "provider_name",
+    "request_type",
+    "response_model",
+    "review_category",
+    "skill_count",
+    "skills",
+    "span_kind",
+    "token_type",
+}
+reserved_prefixes = (
+    "request_",
+    "response_",
+    "session_",
+    "skill_",
+    "subagent_",
+    "tool_",
+    "usage_",
+)
+
+
+def is_reserved_resource_attribute_key(key):
+    return key in reserved_exact or key.startswith(reserved_prefixes)
 
 config = {}
 if config_file.exists():
@@ -340,7 +392,6 @@ if plugin_id not in enabled:
 section = config.setdefault("hermes_otel_plugin", {})
 section["enabled"] = True
 section.setdefault("resource_attributes", {})
-section["resource_attributes"].setdefault("agent_runtime", "hermes")
 
 if service_name:
     section["service_name"] = service_name
@@ -348,6 +399,8 @@ if service_name:
 for tag in tags:
     key, sep, value = str(tag).partition("=")
     if not key or not sep:
+        continue
+    if is_reserved_resource_attribute_key(key):
         continue
     section["resource_attributes"][key] = value
 

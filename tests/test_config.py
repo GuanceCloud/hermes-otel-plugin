@@ -27,9 +27,25 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(cfg.trace_path, "custom/traces")
         self.assertTrue(cfg.logs_enabled)
         self.assertEqual(cfg.resource_attributes["app_name"], "hermes-dev")
-        self.assertEqual(cfg.resource_attributes["agent_runtime"], "hermes")
+        self.assertNotIn("agent_runtime", cfg.resource_attributes)
         self.assertEqual(cfg.headers["Authorization"], "Bearer token")
         self.assertEqual(cfg.log_events, ("session", "tool"))
+
+    def test_reserved_resource_attributes_are_filtered(self) -> None:
+        cfg = resolve_plugin_config(
+            {
+                "hermes_otel_plugin": {
+                    "resource_attributes": {
+                        "platform": "cli",
+                        "session_id": "sess-1",
+                        "tool_name": "terminal",
+                        "agent_version": "1.2.3",
+                        "deployment.environment": "dev",
+                    }
+                }
+            }
+        )
+        self.assertEqual(cfg.resource_attributes, {"deployment.environment": "dev"})
 
     def test_invalid_values_fall_back(self) -> None:
         cfg = resolve_plugin_config(

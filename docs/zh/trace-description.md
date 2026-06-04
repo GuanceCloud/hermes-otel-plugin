@@ -165,6 +165,8 @@
   - `provider_name`
   - `request_model`
   - `response_model`
+  - `system_prompt_*`
+  - `request_payload_*`
   - `input_preview`
   - `tool_context_preview`
   - `output_preview`
@@ -174,6 +176,7 @@
 补充说明：
 
 - 当前 Hermes 宿主 hook 不直接把完整 prompt / response 文本传给插件
+- 插件会尽力补充请求诊断字段，例如 `system_prompt_chars`、`system_prompt_bytes`、`system_prompt_hash`、`request_payload_chars`、`request_payload_bytes`、`request_tool_count`
 - 因此 `llm.output_preview` 仍然是插件侧摘要，不等于 provider 原始响应体
 - `llm.input_preview` 当前仅用于首个模型调用，表示原始用户输入摘要
 - 后续模型调用如果需要表达插件侧拼接的工具上下文，会写入 `tool_context_preview`
@@ -319,6 +322,7 @@
 | `skill_count` | 当前 skill 数量 |
 | `output_preview` | 输出摘要 |
 | `output_length` | 输出长度 |
+| `request_user_prompt_estimated_tokens` | 本轮请求中用户 prompt 的粗估 token，仅写入 `hermes_request` 和 `agent_run`，用于从总输入里扣除用户内容 |
 
 ### Request Type
 
@@ -348,6 +352,15 @@
 | --- | --- |
 | `api_mode` | 模型 API 模式 |
 | `api_call_count` | 当前请求内第几次模型调用 |
+| `system_prompt_chars` | 本次 session 缓存 system prompt 的字符数（从本地 Hermes 状态库读取） |
+| `system_prompt_bytes` | 本次 session 缓存 system prompt 的 UTF-8 字节数 |
+| `system_prompt_hash` | 本次 session 缓存 system prompt 的短哈希，用于判断前缀是否变化 |
+| `request_message_count` | Hermes 上报的请求消息数量 |
+| `request_tool_count` | 本次请求附带的工具 schema 数量 |
+| `request_payload_item_count` | provider 请求体中 `messages` / `input` 列表的项数 |
+| `request_payload_chars` | provider 请求体中 `messages` / `input` 列表的序列化字符数 |
+| `request_payload_bytes` | provider 请求体中 `messages` / `input` 列表的 UTF-8 字节数 |
+| `approx_input_tokens` | Hermes 在请求前给出的粗估 token，当前口径仅覆盖 `messages` / `input` 主体 |
 | `input_preview` | 首个模型调用的输入摘要，当前通常是用户输入摘要 |
 | `tool_context_preview` | 插件侧归纳的工具上下文摘要，仅用于后续模型调用 |
 | `input_length` | 输入长度 |
@@ -478,10 +491,14 @@
 - cache token 单独写入 `usage_cache_*`
 - 如果 provider 返回的是累计 cache 计数，插件会归一成单次 `llm` 调用的增量
 - 根 span 和 `agent_run` 会聚合整轮请求内所有 `llm` 的 token
+- 如果要估算完整输入，可用 `usage_input_tokens + usage_cache_read_input_tokens + usage_cache_write_input_tokens`
 
 ## 已知边界
 
 - `llm.input_preview` 当前不是 provider 原始请求正文，只是首个模型调用的用户输入摘要
+- `system_prompt_*` 来自本地 Hermes `state.db` 中该 session 的缓存 prompt 快照，不保证等于每个 provider 实际收到的最终 `effective_system`
+- `request_payload_*` 仅覆盖 hook 可见的 `messages` / `input` 主体，不包含所有 provider 都会单独透传的顶层字段
+- `approx_input_tokens` 当前来自 Hermes 的 messages-only 预估，不包含完整 system prompt / tool schema 前缀
 - `llm.tool_context_preview` 是插件侧拼接的工具上下文摘要，不代表 provider 原始 prompt
 - `llm.output_preview` 当前不是 provider 原始响应正文，而是插件侧摘要
 - `usage_reasoning_tokens` 只有 Hermes 或 provider 已透传时才会有值

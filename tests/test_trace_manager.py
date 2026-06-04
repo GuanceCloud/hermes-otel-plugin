@@ -128,6 +128,14 @@ class FakeSessionMetadataResolver:
         return self.items.get(session_id)
 
 
+class FakeSessionPromptResolver:
+    def __init__(self, items=None) -> None:
+        self.items = items or {}
+
+    def get_prompt_diagnostics(self, session_id):
+        return self.items.get(session_id)
+
+
 class TraceManagerTests(unittest.TestCase):
     def setUp(self) -> None:
         config = HermesOtelPluginConfig(logs_enabled=True)
@@ -136,6 +144,7 @@ class TraceManagerTests(unittest.TestCase):
         logs = LogManager(runtime, config)
         self.lineage = FakeLineage()
         self.session_metadata = FakeSessionMetadataResolver()
+        self.session_prompt = FakeSessionPromptResolver()
         self.manager = TraceManager(
             runtime,
             metrics,
@@ -143,6 +152,7 @@ class TraceManagerTests(unittest.TestCase):
             config,
             lineage=self.lineage,
             session_metadata=self.session_metadata,
+            session_prompt=self.session_prompt,
         )
         self.runtime = runtime
 
@@ -521,6 +531,7 @@ class TraceManagerTests(unittest.TestCase):
         )
         llm_span = next(span for span in self.runtime.spans if span.name == "llm")
         self.assertEqual(llm_span.attributes["approx_input_tokens"], 123)
+        self.assertNotIn("approx_input_tokens_scope", llm_span.attributes)
         self.assertNotIn("usage_input_tokens", llm_span.attributes)
 
         self.manager.finish_api_request(
@@ -564,6 +575,57 @@ class TraceManagerTests(unittest.TestCase):
         token_usage_calls = self.manager._metrics._token_usage.calls
         total_call = next(call for call in token_usage_calls if call[2]["token_type"] == "total")
         self.assertEqual(total_call[1], 0.0)
+
+    def test_llm_request_diagnostics_include_payload_and_system_prompt_metadata(self) -> None:
+        class PromptDiagnostics:
+            system_prompt_chars = 23024
+            system_prompt_bytes = 25904
+            system_prompt_hash = "abc123def4567890"
+
+        self.session_prompt.items["sess-diag"] = PromptDiagnostics()
+        self.manager.start_turn(
+            session_id="sess-diag",
+            user_message="当前是什么模型",
+            conversation_history=[],
+            is_first_turn=True,
+            model="gpt-test",
+            platform="cli",
+        )
+        request_messages = [
+            {"role": "user", "content": [{"type": "input_text", "text": "当前是什么模型"}]},
+        ]
+        self.manager.start_api_request(
+            session_id="sess-diag",
+            platform="cli",
+            model="gpt-test",
+            provider="openai",
+            api_call_count=1,
+            api_mode="codex_responses",
+            approx_input_tokens=16675,
+            request_char_count=7,
+            request_messages=request_messages,
+            message_count=1,
+            tool_count=28,
+        )
+
+        llm_span = next(span for span in self.runtime.spans if span.name == "llm")
+        self.assertEqual(llm_span.attributes["request_message_count"], 1)
+        self.assertEqual(llm_span.attributes["request_tool_count"], 28)
+        self.assertEqual(llm_span.attributes["request_payload_item_count"], 1)
+        self.assertGreater(llm_span.attributes["request_payload_chars"], 0)
+        self.assertGreater(llm_span.attributes["request_payload_bytes"], 0)
+        self.assertNotIn("request_user_prompt_estimated_tokens", llm_span.attributes)
+        self.assertNotIn("approx_input_tokens_scope", llm_span.attributes)
+        self.assertEqual(llm_span.attributes["system_prompt_chars"], 23024)
+        self.assertEqual(llm_span.attributes["system_prompt_bytes"], 25904)
+        self.assertEqual(llm_span.attributes["system_prompt_hash"], "abc123def4567890")
+        root_span = next(span for span in self.runtime.spans if span.name == "hermes_request")
+        agent_span = next(span for span in self.runtime.spans if span.name == "agent_run")
+        self.assertGreater(root_span.attributes["request_user_prompt_estimated_tokens"], 0)
+        self.assertEqual(
+            agent_span.attributes["request_user_prompt_estimated_tokens"],
+            root_span.attributes["request_user_prompt_estimated_tokens"],
+        )
 
     def test_subagent_span(self) -> None:
         self.manager.start_turn(

@@ -127,7 +127,7 @@ bash scripts/install.sh latest \
 
 ```bash
 OSS_ENDPOINT=https://example.com \
-bash scripts/install.sh v0.1.2 \
+bash scripts/install.sh v0.1.3 \
   --type otlp \
   --endpoint http://127.0.0.1:9529/otel
 ```
@@ -176,9 +176,7 @@ hermes_otel_plugin:
     - subagent
 ```
 
-默认会强制注入：
-
-- `resource_attributes.agent_runtime=hermes`
+插件会在 span / metric / log 属性层统一写入 `agent_runtime=hermes`。更广义地说，像 `session_id`、`platform`、`tool_name`、`request_model` 这类本来就由插件写入 telemetry 的键，也不要再放进 `resource_attributes`。插件现在会自动忽略这些冲突键，只保留真正的 resource 级 tag。
 
 ## 命令入口
 

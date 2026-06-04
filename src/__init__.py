@@ -5,7 +5,7 @@ import re
 import subprocess
 
 AGENT_RUNTIME = "hermes"
-PLUGIN_VERSION = "0.1.2"
+PLUGIN_VERSION = "0.1.3"
 
 
 def _resolve_agent_version() -> str:

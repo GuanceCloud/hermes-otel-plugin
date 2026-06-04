@@ -5,6 +5,7 @@ import sqlite3
 import threading
 import time
 import json
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -57,6 +58,7 @@ class TurnState:
     provider_name: str | None = None
     request_model: str | None = None
     response_model: str | None = None
+    request_user_prompt_estimated_tokens: int | None = None
     aggregate_input_tokens: int = 0
     aggregate_output_tokens: int = 0
     aggregate_cache_read_tokens: int = 0
@@ -191,6 +193,14 @@ class SessionMetadata:
     session_file: str | None = None
 
 
+@dataclass(slots=True)
+class SessionPromptDiagnostics:
+    session_id: str
+    system_prompt_chars: int
+    system_prompt_bytes: int
+    system_prompt_hash: str
+
+
 class SessionMetadataResolver:
     def __init__(self, sessions_dir: str | None = None) -> None:
         self._sessions_dir = Path(sessions_dir or os.path.expanduser("~/.hermes/sessions"))
@@ -304,3 +314,53 @@ class SessionMetadataResolver:
             return datetime.fromisoformat(raw).isoformat()
         except Exception:
             return raw
+
+
+class SessionPromptResolver:
+    def __init__(self, db_path: str | None = None) -> None:
+        self._db_path = Path(db_path or os.path.expanduser("~/.hermes/state.db"))
+        self._lock = threading.RLock()
+        self._cache: dict[str, SessionPromptDiagnostics | None] = {}
+
+    def get_prompt_diagnostics(self, session_id: str | None) -> SessionPromptDiagnostics | None:
+        if not session_id:
+            return None
+        with self._lock:
+            if session_id in self._cache:
+                return self._cache[session_id]
+
+        diagnostics = self._query_prompt_diagnostics(session_id)
+        with self._lock:
+            self._cache[session_id] = diagnostics
+        return diagnostics
+
+    def _query_prompt_diagnostics(self, session_id: str) -> SessionPromptDiagnostics | None:
+        if not self._db_path.exists():
+            return None
+        connection = None
+        try:
+            connection = sqlite3.connect(str(self._db_path))
+            row = connection.execute(
+                "SELECT system_prompt FROM sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            prompt = row[0]
+            if not isinstance(prompt, str) or not prompt:
+                return None
+            prompt_bytes = prompt.encode("utf-8")
+            return SessionPromptDiagnostics(
+                session_id=session_id,
+                system_prompt_chars=len(prompt),
+                system_prompt_bytes=len(prompt_bytes),
+                system_prompt_hash=hashlib.sha1(prompt_bytes).hexdigest()[:16],
+            )
+        except Exception:
+            return None
+        finally:
+            if connection is not None:
+                try:
+                    connection.close()
+                except Exception:
+                    pass

@@ -13,6 +13,47 @@ DEFAULT_FLUSH_INTERVAL_MS = 30_000
 DEFAULT_ROOT_SPAN_TTL_MS = 10 * 60 * 1000
 DEFAULT_PROTOCOL = "http/protobuf"
 DEFAULT_LOG_EVENTS = ("session", "api_request", "tool", "subagent")
+RESERVED_RESOURCE_ATTRIBUTE_KEYS = frozenset(
+    {
+        "agent_runtime",
+        "agent_version",
+        "api_call_count",
+        "api_mode",
+        "assistant_tool_call_count",
+        "conversation_length",
+        "final_status",
+        "finish_reason",
+        "input_length",
+        "input_preview",
+        "is_auto_review",
+        "is_first_turn",
+        "log_category",
+        "max_tokens",
+        "model_name",
+        "operation_name",
+        "outcome",
+        "output_length",
+        "output_preview",
+        "platform",
+        "provider_name",
+        "request_type",
+        "response_model",
+        "review_category",
+        "skill_count",
+        "skills",
+        "span_kind",
+        "token_type",
+    }
+)
+RESERVED_RESOURCE_ATTRIBUTE_PREFIXES = (
+    "request_",
+    "response_",
+    "session_",
+    "skill_",
+    "subagent_",
+    "tool_",
+    "usage_",
+)
 
 
 @dataclass(slots=True)
@@ -94,11 +135,19 @@ def _normalize_headers(value: Any) -> dict[str, str]:
     return normalized
 
 
+def _is_reserved_resource_attribute_key(key: str) -> bool:
+    if key in RESERVED_RESOURCE_ATTRIBUTE_KEYS:
+        return True
+    return key.startswith(RESERVED_RESOURCE_ATTRIBUTE_PREFIXES)
+
+
 def _normalize_resource_attributes(value: Any) -> dict[str, str | int | float | bool]:
     record = _as_mapping(value)
     normalized: dict[str, str | int | float | bool] = {}
     for key, item in record.items():
         if not isinstance(key, str):
+            continue
+        if _is_reserved_resource_attribute_key(key):
             continue
         if isinstance(item, (str, int, float, bool)):
             if isinstance(item, str):
@@ -108,7 +157,6 @@ def _normalize_resource_attributes(value: Any) -> dict[str, str | int | float | 
                 normalized[key] = stripped
             else:
                 normalized[key] = item
-    normalized["agent_runtime"] = "hermes"
     return normalized
 
 
@@ -168,4 +216,3 @@ def load_plugin_config() -> HermesOtelPluginConfig:
 
 def resolve_otlp_url(endpoint: str, signal_path: str) -> str:
     return f"{endpoint.rstrip('/')}/{signal_path.strip('/')}"
-
