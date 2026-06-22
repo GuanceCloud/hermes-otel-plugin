@@ -39,6 +39,8 @@ class ConfigTests(unittest.TestCase):
                         "platform": "cli",
                         "session_id": "sess-1",
                         "tool_name": "terminal",
+                        "gen_ai.request.model": "gpt-test",
+                        "error.type": "token_invalidated",
                         "agent_version": "1.2.3",
                         "deployment.environment": "dev",
                     }

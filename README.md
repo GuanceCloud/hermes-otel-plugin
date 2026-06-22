@@ -14,7 +14,7 @@ This repository follows the design direction of `openclaw-otel-plugin`, but the 
 ### Traces
 
 - `hermes_request`
-- `agent_run`
+- `invoke_agent`
 - `llm`
 - `skill:<name>`
 - `tool:<name>`
@@ -28,6 +28,8 @@ Trace / span description: [docs/en/trace-description.md](docs/en/trace-descripti
 
 Metrics description: [docs/en/metrics.md](docs/en/metrics.md)
 
+Semantic field mapping: [docs/en/semantic-field-mapping.md](docs/en/semantic-field-mapping.md)
+
 Skill timing semantics:
 
 - `tool:skill_view`: the load action and load latency for a skill, usually a short span.
@@ -35,7 +37,7 @@ Skill timing semantics:
 
 Subagent hierarchy:
 
-- `subagent:<role>` normally attaches under `agent_run`.
+- `subagent:<role>` normally attaches under `invoke_agent`.
 - When the turn contains a triggering `tool:delegate_task`, `subagent:<role>` attaches under that `tool:delegate_task` span instead to preserve the causal relationship.
 
 ### Metrics
@@ -45,6 +47,8 @@ Subagent hierarchy:
 - `gen_ai.agent.token.usage`
 - `gen_ai.agent.operation.count`
 - `gen_ai.agent.operation.duration`
+- `gen_ai.client.operation.duration`
+- `gen_ai.client.token.usage`
 - `gen_ai.agent.session.token.input`
 - `gen_ai.agent.session.token.output`
 - `gen_ai.agent.session.token.total`
@@ -63,6 +67,7 @@ Subagent hierarchy:
 Notes:
 
 - `gen_ai.agent.operation.*` currently covers `model`, `tool`, `skill`, and `subagent`
+- `gen_ai.client.*` follows OpenTelemetry GenAI client semantics for model calls and is dual-written with legacy agent model metrics
 - `gen_ai.agent.session.token.*` accumulates request-level token totals into session-level counters
 - request metrics also include `request_type` / `review_category` so automatic review flows can be separated from normal user requests
 
@@ -116,7 +121,7 @@ Useful flags:
 The installer also supports the same latest/version pattern as `openclaw-otel-plugin`:
 
 ```bash
-OSS_ENDPOINT=https://github.com/GuanceCloud/hermes-otel-plugin/releases/download/v0.1.3 \
+OSS_ENDPOINT=https://github.com/GuanceCloud/hermes-otel-plugin/releases \
 bash scripts/install.sh latest \
   --type gtrace \
   --endpoint https://llm-openway.guance.com \
@@ -126,13 +131,13 @@ bash scripts/install.sh latest \
 or:
 
 ```bash
-OSS_ENDPOINT=https://github.com/GuanceCloud/hermes-otel-plugin/releases/download/v0.1.3 \
+OSS_ENDPOINT=https://github.com/GuanceCloud/hermes-otel-plugin/releases \
 bash scripts/install.sh v0.1.3 \
   --type otlp \
   --endpoint http://127.0.0.1:9529/otel
 ```
 
-The script automatically appends `/hermes-otel-plugin` to `OSS_ENDPOINT` for flat object-storage layouts, but it keeps GitHub Release download roots such as `.../releases/download/v0.1.3` unchanged.
+For GitHub Releases, use the repository `.../releases` root with `latest` by default. If you need a specific version, change only the first positional argument from `latest` to `vX.Y.Z`. For flat object-storage layouts, the script still appends `/hermes-otel-plugin` to `OSS_ENDPOINT` automatically.
 
 ### Source install
 

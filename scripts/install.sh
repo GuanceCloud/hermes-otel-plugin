@@ -38,7 +38,9 @@ Usage:
 
 Environment variables:
   OSS_ENDPOINT                 Release root endpoint. Required for latest/version installs.
-                               The script appends /hermes-otel-plugin when needed.
+                               For flat object storage, the script appends /hermes-otel-plugin when needed.
+                               For GitHub Releases, prefer .../releases and let the script resolve
+                               latest/download vs download/vX.Y.Z automatically.
   HERMES_HOME                  Hermes home directory. Default: ~/.hermes
   HERMES_PLUGIN_DIR            Install directory. Default: ~/.hermes/plugins/hermes-otel-plugin
   HERMES_CONFIG_FILE           Hermes config file. Default: ~/.hermes/config.yaml
@@ -184,6 +186,12 @@ resolve_download_base_url() {
 
   local root="${OSS_ENDPOINT%/}"
   case "$root" in
+    */releases)
+      printf '%s' "$root"
+      ;;
+    */releases/latest/download)
+      printf '%s' "$root"
+      ;;
     */releases/download/*)
       printf '%s' "$root"
       ;;
@@ -225,14 +233,43 @@ download_archive() {
 download_latest_archive() {
   local target="$1"
   local base_url="${DOWNLOAD_BASE_URL%/}"
-  download_archive "${base_url}/${PLUGIN_NAME}.tar.gz" "$target"
+  case "$base_url" in
+    */releases)
+      download_archive "${base_url}/latest/download/${PLUGIN_NAME}.tar.gz" "$target"
+      ;;
+    */releases/latest/download)
+      download_archive "${base_url}/${PLUGIN_NAME}.tar.gz" "$target"
+      ;;
+    */releases/download/*)
+      local releases_root="${base_url%/download/*}"
+      download_archive "${releases_root}/latest/download/${PLUGIN_NAME}.tar.gz" "$target"
+      ;;
+    *)
+      download_archive "${base_url}/${PLUGIN_NAME}.tar.gz" "$target"
+      ;;
+  esac
 }
 
 download_version_archive() {
   local version="$1"
   local target="$2"
   local base_url="${DOWNLOAD_BASE_URL%/}"
-  download_archive "${base_url}/${PLUGIN_NAME}-v${version}.tar.gz" "$target"
+  case "$base_url" in
+    */releases)
+      download_archive "${base_url}/download/v${version}/${PLUGIN_NAME}-v${version}.tar.gz" "$target"
+      ;;
+    */releases/latest/download)
+      local releases_root="${base_url%/latest/download}"
+      download_archive "${releases_root}/download/v${version}/${PLUGIN_NAME}-v${version}.tar.gz" "$target"
+      ;;
+    */releases/download/*)
+      local releases_root="${base_url%/download/*}"
+      download_archive "${releases_root}/download/v${version}/${PLUGIN_NAME}-v${version}.tar.gz" "$target"
+      ;;
+    *)
+      download_archive "${base_url}/${PLUGIN_NAME}-v${version}.tar.gz" "$target"
+      ;;
+  esac
 }
 
 extract_archive() {
@@ -346,6 +383,42 @@ reserved_exact = {
     "conversation_length",
     "final_status",
     "finish_reason",
+    "gen_ai.conversation.id",
+    "gen_ai.input.messages",
+    "gen_ai.operation.name",
+    "gen_ai.output.messages",
+    "gen_ai.output.type",
+    "gen_ai.provider.name",
+    "gen_ai.request.choice.count",
+    "gen_ai.request.frequency_penalty",
+    "gen_ai.request.max_tokens",
+    "gen_ai.request.model",
+    "gen_ai.request.presence_penalty",
+    "gen_ai.request.seed",
+    "gen_ai.request.stop_sequences",
+    "gen_ai.request.stream",
+    "gen_ai.request.temperature",
+    "gen_ai.request.top_k",
+    "gen_ai.request.top_p",
+    "gen_ai.response.finish_reasons",
+    "gen_ai.response.id",
+    "gen_ai.response.model",
+    "gen_ai.system_instructions",
+    "gen_ai.token.type",
+    "gen_ai.tool.call.arguments",
+    "gen_ai.tool.call.id",
+    "gen_ai.tool.call.result",
+    "gen_ai.tool.definitions",
+    "gen_ai.tool.name",
+    "gen_ai.usage.cache_creation.input_tokens",
+    "gen_ai.usage.cache_read.input_tokens",
+    "gen_ai.usage.cache_read_input_tokens",
+    "gen_ai.usage.cache_write_input_tokens",
+    "gen_ai.usage.input_tokens",
+    "gen_ai.usage.output_tokens",
+    "gen_ai.usage.reasoning.output_tokens",
+    "gen_ai.usage.reasoning_tokens",
+    "gen_ai.usage.total_tokens",
     "input_length",
     "input_preview",
     "is_auto_review",
@@ -368,6 +441,8 @@ reserved_exact = {
     "token_type",
 }
 reserved_prefixes = (
+    "error.",
+    "gen_ai.",
     "request_",
     "response_",
     "session_",

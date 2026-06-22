@@ -14,7 +14,7 @@
 ### Traces
 
 - `hermes_request`
-- `agent_run`
+- `invoke_agent`
 - `llm`
 - `skill:<name>`
 - `tool:<name>`
@@ -28,6 +28,8 @@ Trace / span 描述见：[docs/zh/trace-description.md](docs/zh/trace-descriptio
 
 Metrics 描述见：[docs/zh/metrics.md](docs/zh/metrics.md)
 
+语义字段映射见：[docs/zh/semantic-field-mapping.md](docs/zh/semantic-field-mapping.md)
+
 关于 skill 的两个时间语义：
 
 - `tool:skill_view`：表示 skill 的加载动作和加载耗时，通常是短 span。
@@ -35,7 +37,7 @@ Metrics 描述见：[docs/zh/metrics.md](docs/zh/metrics.md)
 
 关于子代理层级：
 
-- `subagent:<role>` 默认挂在 `agent_run` 下。
+- `subagent:<role>` 默认挂在 `invoke_agent` 下。
 - 如果本轮存在触发子代理的 `tool:delegate_task`，则 `subagent:<role>` 优先挂在该 `tool:delegate_task` 下，表示明确的因果关系。
 
 ### Metrics
@@ -45,6 +47,8 @@ Metrics 描述见：[docs/zh/metrics.md](docs/zh/metrics.md)
 - `gen_ai.agent.token.usage`
 - `gen_ai.agent.operation.count`
 - `gen_ai.agent.operation.duration`
+- `gen_ai.client.operation.duration`
+- `gen_ai.client.token.usage`
 - `gen_ai.agent.session.token.input`
 - `gen_ai.agent.session.token.output`
 - `gen_ai.agent.session.token.total`
@@ -63,6 +67,7 @@ Metrics 描述见：[docs/zh/metrics.md](docs/zh/metrics.md)
 补充说明：
 
 - `gen_ai.agent.operation.*` 当前覆盖 `model`、`tool`、`skill`、`subagent`
+- `gen_ai.client.*` 按 OpenTelemetry GenAI client 语义记录模型调用，并与旧 agent 模型指标双写
 - `gen_ai.agent.session.token.*` 表示按 Hermes request 聚合后，累计写入 session 级 token 计数
 - request 类指标会额外带 `request_type` / `review_category`，用于区分普通用户请求和自动 review 请求
 
@@ -116,7 +121,7 @@ bash output/install.sh output/hermes-otel-plugin.tar.gz \
 安装脚本也支持和 `openclaw-otel-plugin` 类似的 latest / version 模式：
 
 ```bash
-OSS_ENDPOINT=https://github.com/GuanceCloud/hermes-otel-plugin/releases/download/v0.1.3 \
+OSS_ENDPOINT=https://github.com/GuanceCloud/hermes-otel-plugin/releases \
 bash scripts/install.sh latest \
   --type gtrace \
   --endpoint https://llm-openway.guance.com \
@@ -126,13 +131,13 @@ bash scripts/install.sh latest \
 或者：
 
 ```bash
-OSS_ENDPOINT=https://github.com/GuanceCloud/hermes-otel-plugin/releases/download/v0.1.3 \
+OSS_ENDPOINT=https://github.com/GuanceCloud/hermes-otel-plugin/releases \
 bash scripts/install.sh v0.1.3 \
   --type otlp \
   --endpoint http://127.0.0.1:9529/otel
 ```
 
-对于平铺对象存储目录，脚本会在需要时自动把 `OSS_ENDPOINT` 补成 `/hermes-otel-plugin`。如果传的是 GitHub Release 下载根目录，例如 `.../releases/download/v0.1.3`，脚本不会再追加这一层路径。
+对于 GitHub Release，推荐把 `OSS_ENDPOINT` 固定写成仓库的 `.../releases` 根目录，默认用 `latest`。如果需要安装指定版本，只改第一个位置参数为 `vX.Y.Z` 即可。对于平铺对象存储目录，脚本仍会在需要时自动把 `OSS_ENDPOINT` 补成 `/hermes-otel-plugin`。
 
 ### 源码安装
 

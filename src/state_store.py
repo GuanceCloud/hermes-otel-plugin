@@ -64,6 +64,8 @@ class TurnState:
     aggregate_cache_read_tokens: int = 0
     aggregate_cache_write_tokens: int = 0
     aggregate_reasoning_tokens: int = 0
+    api_error_seen: bool = False
+    api_error_terminal: bool = False
     last_raw_cache_read_tokens: int | None = None
     last_raw_cache_write_tokens: int | None = None
     pending_llm: PendingLlmState | None = None

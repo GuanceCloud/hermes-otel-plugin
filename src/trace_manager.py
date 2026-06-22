@@ -30,9 +30,23 @@ def _clip(value: Any, limit: int = 240) -> str | None:
     return text[:limit]
 
 
+def _attrs(**kwargs: Any) -> dict[str, Any]:
+    return {key: value for key, value in kwargs.items() if value is not None}
+
+
 def _json_preview(value: Any, limit: int = 240) -> str | None:
     try:
         text = json.dumps(value, ensure_ascii=True, sort_keys=True)
+    except Exception:
+        text = str(value)
+    return _clip(text, limit=limit)
+
+
+def _json_attr(value: Any, limit: int = 65536) -> str | None:
+    if value is None:
+        return None
+    try:
+        text = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
     except Exception:
         text = str(value)
     return _clip(text, limit=limit)
@@ -121,11 +135,237 @@ def _tool_call_preview(tool_names: list[str]) -> str | None:
     return _clip(f"toolCall:{','.join(normalized)}", limit=1200)
 
 
+def _request_body_from_payload(request: Any) -> dict[str, Any]:
+    if not isinstance(request, dict):
+        return {}
+    body = request.get("body")
+    return body if isinstance(body, dict) else {}
+
+
+def _first_present_mapping(*values: Any) -> dict[str, Any]:
+    for value in values:
+        if isinstance(value, dict):
+            return value
+    return {}
+
+
+def _coerce_message_list(*values: Any) -> list[Any]:
+    for value in values:
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str) and value.strip():
+            return [{"role": "user", "content": value}]
+    return []
+
+
+def _content_part_from_text(text: Any) -> dict[str, Any] | None:
+    content = _clip(text, limit=12000)
+    if content is None:
+        return None
+    return {"type": "text", "content": content}
+
+
+def _normalise_content_parts(content: Any) -> list[dict[str, Any]]:
+    if isinstance(content, str):
+        part = _content_part_from_text(content)
+        return [part] if part is not None else []
+    if isinstance(content, list):
+        parts: list[dict[str, Any]] = []
+        for item in content:
+            if isinstance(item, str):
+                part = _content_part_from_text(item)
+                if part is not None:
+                    parts.append(part)
+                continue
+            if not isinstance(item, dict):
+                continue
+            part_type = str(item.get("type") or "").strip()
+            if part_type in {"text", "input_text", "output_text"}:
+                part = _content_part_from_text(item.get("text") or item.get("content"))
+                if part is not None:
+                    parts.append(part)
+            elif part_type in {"image", "image_url", "input_image"}:
+                image_url = item.get("image_url") or item.get("url")
+                if isinstance(image_url, dict):
+                    image_url = image_url.get("url")
+                parts.append(_attrs(type="image", image_url=_clip(image_url, limit=12000)))
+            else:
+                parts.append(_attrs(type=part_type or "content", content=_clip(item, limit=12000)))
+        return parts
+    if isinstance(content, dict):
+        if content.get("_multimodal"):
+            return _normalise_content_parts(content.get("content") or content.get("text_summary"))
+        part = _content_part_from_text(content.get("text") or content.get("content"))
+        return [part] if part is not None else []
+    part = _content_part_from_text(content)
+    return [part] if part is not None else []
+
+
+def _tool_call_name_and_args(tool_call: Any) -> tuple[str | None, Any]:
+    if not isinstance(tool_call, dict):
+        return None, None
+    function = tool_call.get("function")
+    if isinstance(function, dict):
+        return function.get("name") or tool_call.get("name"), function.get("arguments")
+    return tool_call.get("name"), tool_call.get("arguments") or tool_call.get("args")
+
+
+def _decode_jsonish(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    stripped = value.strip()
+    if not stripped:
+        return value
+    if stripped[0] not in "{[":
+        return value
+    try:
+        return json.loads(stripped)
+    except Exception:
+        return value
+
+
+def _normalise_input_message(message: Any) -> dict[str, Any] | None:
+    if not isinstance(message, dict):
+        return None
+    role = _clip(message.get("role"), limit=64) or "user"
+    parts = _normalise_content_parts(message.get("content"))
+    if role == "tool":
+        result = _decode_jsonish(message.get("content"))
+        parts = [
+            _attrs(
+                type="tool_call_response",
+                id=_clip(message.get("tool_call_id"), limit=256),
+                name=_clip(message.get("name"), limit=256),
+                result=result,
+            )
+        ]
+    for tool_call in message.get("tool_calls") or []:
+        if not isinstance(tool_call, dict):
+            continue
+        name, arguments = _tool_call_name_and_args(tool_call)
+        parts.append(
+            _attrs(
+                type="tool_call",
+                id=_clip(tool_call.get("id"), limit=256),
+                name=_clip(name, limit=256),
+                arguments=_decode_jsonish(arguments),
+            )
+        )
+    if not parts:
+        return None
+    return {"role": role, "parts": parts}
+
+
+def _normalise_output_message(message: Any, finish_reason: Any = None) -> dict[str, Any] | None:
+    if not isinstance(message, dict):
+        return None
+    role = _clip(message.get("role"), limit=64) or "assistant"
+    parts = _normalise_content_parts(message.get("content"))
+    for tool_call in message.get("tool_calls") or []:
+        if not isinstance(tool_call, dict):
+            continue
+        name, arguments = _tool_call_name_and_args(tool_call)
+        parts.append(
+            _attrs(
+                type="tool_call",
+                id=_clip(tool_call.get("id"), limit=256),
+                name=_clip(name, limit=256),
+                arguments=_decode_jsonish(arguments),
+            )
+        )
+    if not parts:
+        return None
+    return _attrs(role=role, parts=parts, finish_reason=_clip(message.get("finish_reason") or finish_reason, limit=128))
+
+
+def _gen_ai_input_messages_attr(messages: list[Any]) -> str | None:
+    normalised = [item for item in (_normalise_input_message(message) for message in messages) if item is not None]
+    return _json_attr(normalised) if normalised else None
+
+
+def _gen_ai_output_messages_attr(messages: list[Any], finish_reason: Any = None) -> str | None:
+    normalised = [
+        item
+        for item in (_normalise_output_message(message, finish_reason=finish_reason) for message in messages)
+        if item is not None
+    ]
+    return _json_attr(normalised) if normalised else None
+
+
+def _gen_ai_system_instructions_attr(body: dict[str, Any]) -> str | None:
+    instructions = body.get("instructions") or body.get("system")
+    if instructions is None:
+        return None
+    if isinstance(instructions, list):
+        parts = []
+        for item in instructions:
+            if isinstance(item, dict):
+                parts.extend(_normalise_content_parts(item.get("content") or item.get("text")))
+            else:
+                part = _content_part_from_text(item)
+                if part is not None:
+                    parts.append(part)
+    else:
+        parts = _normalise_content_parts(instructions)
+    return _json_attr(parts) if parts else None
+
+
+def _gen_ai_tool_definitions_attr(body: dict[str, Any]) -> str | None:
+    tools = body.get("tools")
+    if not isinstance(tools, list) or not tools:
+        return None
+    return _json_attr(tools)
+
+
+def _gen_ai_request_attrs(body: dict[str, Any]) -> dict[str, Any]:
+    response_format = body.get("response_format")
+    output_type = None
+    if isinstance(response_format, dict):
+        output_type = response_format.get("type")
+    elif isinstance(response_format, str):
+        output_type = response_format
+    max_tokens = body.get("max_tokens")
+    if max_tokens is None:
+        max_tokens = body.get("max_completion_tokens")
+    return _attrs(
+        **{
+            "gen_ai.request.choice.count": _as_optional_int(body.get("n") or body.get("candidate_count")),
+            "gen_ai.request.frequency_penalty": body.get("frequency_penalty") if isinstance(body.get("frequency_penalty"), (int, float)) else None,
+            "gen_ai.request.max_tokens": _as_optional_int(max_tokens),
+            "gen_ai.request.presence_penalty": body.get("presence_penalty") if isinstance(body.get("presence_penalty"), (int, float)) else None,
+            "gen_ai.request.seed": _as_optional_int(body.get("seed")),
+            "gen_ai.request.temperature": body.get("temperature") if isinstance(body.get("temperature"), (int, float)) else None,
+            "gen_ai.request.top_k": body.get("top_k") if isinstance(body.get("top_k"), (int, float)) else None,
+            "gen_ai.request.top_p": body.get("top_p") if isinstance(body.get("top_p"), (int, float)) else None,
+            "gen_ai.request.stop_sequences": body.get("stop") if isinstance(body.get("stop"), list) else None,
+            "gen_ai.request.stream": body.get("stream") if isinstance(body.get("stream"), bool) else None,
+            "gen_ai.output.type": _clip(output_type, limit=64),
+            "gen_ai.tool.definitions": _gen_ai_tool_definitions_attr(body),
+            "gen_ai.system_instructions": _gen_ai_system_instructions_attr(body),
+        }
+    )
+
+
+def _assistant_message_from_response(response: Any, assistant_message: Any) -> dict[str, Any]:
+    if isinstance(assistant_message, dict):
+        return assistant_message
+    if isinstance(response, dict):
+        nested = response.get("assistant_message")
+        if isinstance(nested, dict):
+            return nested
+        output = response.get("output")
+        if isinstance(output, list):
+            messages = [item for item in output if isinstance(item, dict) and item.get("role")]
+            if messages:
+                return messages[-1]
+    return {}
+
+
 def _resolve_span_kind(resource_name: str) -> str:
     normalized = str(resource_name or "").strip().lower()
     if normalized == "hermes_request":
         return "request"
-    if normalized == "agent_run":
+    if normalized in {"agent_run", "invoke_agent"}:
         return "agent"
     if normalized == "llm":
         return "llm"
@@ -314,7 +554,78 @@ def _usage_attrs(usage_summary: dict[str, int]) -> dict[str, int]:
         "usage_cache_write_input_tokens": usage_summary["cache_write_tokens"],
         "usage_cache_total_tokens": usage_summary["cache_total_tokens"],
         "usage_reasoning_tokens": usage_summary["reasoning_tokens"],
+        "gen_ai.usage.input_tokens": usage_summary["input_tokens"],
+        "gen_ai.usage.output_tokens": usage_summary["output_tokens"],
+        "gen_ai.usage.total_tokens": usage_summary["total_tokens"],
+        "gen_ai.usage.cache_read_input_tokens": usage_summary["cache_read_tokens"],
+        "gen_ai.usage.cache_write_input_tokens": usage_summary["cache_write_tokens"],
+        "gen_ai.usage.reasoning_tokens": usage_summary["reasoning_tokens"],
+        "gen_ai.usage.cache_read.input_tokens": usage_summary["cache_read_tokens"],
+        "gen_ai.usage.cache_creation.input_tokens": usage_summary["cache_write_tokens"],
+        "gen_ai.usage.reasoning.output_tokens": usage_summary["reasoning_tokens"],
     }
+
+
+def _as_optional_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        normalized = value.strip()
+        if normalized.isdigit():
+            return int(normalized)
+    return None
+
+
+def _api_error_attrs(
+    error: Any,
+    *,
+    status_code: Any = None,
+    retry_count: Any = None,
+    max_retries: Any = None,
+    retryable: Any = None,
+    reason: Any = None,
+    base_url: Any = None,
+) -> dict[str, Any]:
+    error_type = None
+    error_message = None
+    error_code = None
+    if isinstance(error, dict):
+        error_type = error.get("type")
+        error_message = error.get("message")
+        error_code = error.get("code")
+    elif error is not None:
+        error_message = error
+    standard_error_type = _clip(error_code) or _clip(error_type) or _clip(reason)
+    return {
+        "outcome": "error",
+        "error_type": _clip(error_type),
+        "error_message": _clip(error_message, limit=1200),
+        "error_code": _clip(error_code),
+        "error.type": standard_error_type,
+        "error_reason": _clip(reason),
+        "http_status_code": _as_optional_int(status_code),
+        "retry_count": _as_optional_int(retry_count),
+        "max_retries": _as_optional_int(max_retries),
+        "retryable": retryable if isinstance(retryable, bool) else None,
+        "base_url": _clip(base_url, limit=512),
+    }
+
+
+def _is_terminal_api_error(
+    *,
+    retryable: Any = None,
+    retry_count: Any = None,
+    max_retries: Any = None,
+) -> bool:
+    if retryable is False:
+        return True
+    current_retry = _as_optional_int(retry_count)
+    retry_limit = _as_optional_int(max_retries)
+    if current_retry is not None and retry_limit is not None and current_retry >= retry_limit:
+        return True
+    return False
 
 
 def _normalize_cache_usage_for_turn(turn: TurnState, usage_summary: dict[str, int]) -> dict[str, int]:
@@ -346,6 +657,46 @@ def _normalize_cache_usage_for_turn(turn: TurnState, usage_summary: dict[str, in
     normalized["cache_write_tokens"] = cache_write_tokens
     normalized["cache_total_tokens"] = cache_read_tokens + cache_write_tokens
     return normalized
+
+
+def _gen_ai_common_attrs(session_id: str) -> dict[str, Any]:
+    return {
+        "gen_ai.conversation.id": session_id,
+    }
+
+
+def _gen_ai_agent_attrs(session_id: str, model: str | None = None) -> dict[str, Any]:
+    attrs = {
+        **_gen_ai_common_attrs(session_id),
+        "gen_ai.operation.name": "invoke_agent",
+    }
+    if model is not None:
+        attrs["gen_ai.request.model"] = model
+    return attrs
+
+
+def _gen_ai_model_attrs(
+    *,
+    session_id: str,
+    provider_name: str | None = None,
+    request_model: str | None = None,
+    response_model: str | None = None,
+) -> dict[str, Any]:
+    return {
+        **_gen_ai_common_attrs(session_id),
+        "gen_ai.operation.name": "chat",
+        "gen_ai.provider.name": provider_name,
+        "gen_ai.request.model": request_model,
+        "gen_ai.response.model": response_model,
+    }
+
+
+def _gen_ai_tool_attrs(session_id: str, tool_name: str | None = None) -> dict[str, Any]:
+    return {
+        **_gen_ai_common_attrs(session_id),
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.name": tool_name,
+    }
 
 
 class TraceManager:
@@ -431,6 +782,8 @@ class TraceManager:
             "session_file": turn.session_file,
             "platform": turn.platform,
             "request_model": turn.model,
+            **_gen_ai_common_attrs(turn.session_id),
+            "gen_ai.request.model": turn.model,
             "input_length": len(turn.user_message or ""),
             "input_preview": _clip(turn.user_message),
             "conversation_length": turn.conversation_length,
@@ -485,7 +838,7 @@ class TraceManager:
             self._turn_attrs(turn),
         )
         agent_span = self._runtime.start_span(
-            "agent_run",
+            "invoke_agent",
             parent_span=root_span,
             start_time_ns=started_at_ns,
         )
@@ -494,7 +847,7 @@ class TraceManager:
             {
                 "agent_runtime": AGENT_RUNTIME,
                 "agent_version": AGENT_VERSION,
-                "span_kind": _resolve_span_kind("agent_run"),
+                "span_kind": _resolve_span_kind("invoke_agent"),
                 "session_id": session_id,
                 "session_key": turn.session_key,
                 "session_namespace": turn.session_namespace,
@@ -508,6 +861,7 @@ class TraceManager:
                 "session_file": turn.session_file,
                 "platform": platform,
                 "request_model": model,
+                **_gen_ai_agent_attrs(session_id, model),
                 **classification,
             },
         )
@@ -606,11 +960,14 @@ class TraceManager:
         model: str,
         provider: str,
         api_call_count: int,
+        base_url: str | None = None,
         api_mode: str | None = None,
         approx_input_tokens: int | None = None,
         request_char_count: int | None = None,
         max_tokens: int | None = None,
         request_messages: list[Any] | None = None,
+        messages: list[Any] | None = None,
+        request: Any = None,
         message_count: int | None = None,
         tool_count: int | None = None,
         **_: Any,
@@ -635,7 +992,13 @@ class TraceManager:
             "session_id": session_id,
             "platform": platform,
             "provider_name": provider,
+            "base_url": base_url,
             "request_model": model,
+            **_gen_ai_model_attrs(
+                session_id=session_id,
+                provider_name=provider,
+                request_model=model,
+            ),
             "api_mode": api_mode,
             "api_call_count": api_call_count,
             "input_length": request_char_count,
@@ -658,6 +1021,17 @@ class TraceManager:
                 }
                 self._runtime.set_span_attributes(turn.root_span, parent_attrs)
                 self._runtime.set_span_attributes(turn.agent_span, parent_attrs)
+        request_body = _request_body_from_payload(request)
+        input_messages = _coerce_message_list(
+            request_body.get("messages"),
+            request_body.get("input"),
+            request_messages,
+            messages,
+        )
+        if input_messages:
+            attrs["gen_ai.input.messages"] = _gen_ai_input_messages_attr(input_messages)
+        if request_body:
+            attrs.update(_gen_ai_request_attrs(request_body))
         prompt_diagnostics = self._session_prompt.get_prompt_diagnostics(session_id)
         if prompt_diagnostics is not None:
             attrs["system_prompt_chars"] = prompt_diagnostics.system_prompt_chars
@@ -693,6 +1067,11 @@ class TraceManager:
         finish_reason: str | None = None,
         response_model: str | None = None,
         usage: dict[str, Any] | None = None,
+        response: Any = None,
+        assistant_message: Any = None,
+        assistant_response: Any = None,
+        output_messages: list[Any] | None = None,
+        response_messages: list[Any] | None = None,
         assistant_content_chars: int | None = None,
         assistant_tool_call_count: int | None = None,
         **_: Any,
@@ -710,12 +1089,32 @@ class TraceManager:
         duration_ms = (api_duration or 0.0) * 1000.0
         outcome = "error" if finish_reason in {"error", "length"} else "completed"
         usage_summary = _normalize_cache_usage_for_turn(turn, _normalize_usage(usage))
-        resolved_response_model = response_model or model
+        response_payload = response if isinstance(response, dict) else {}
+        resolved_response_model = response_model or _clip(response_payload.get("model"), limit=256) or model
+        assistant_payload = _assistant_message_from_response(response_payload, assistant_message)
+        output_message_candidates = _coerce_message_list(
+            output_messages,
+            response_messages,
+            [assistant_payload] if assistant_payload else None,
+            [{"role": "assistant", "content": assistant_response}] if assistant_response is not None else None,
+        )
         attrs = {
             "finish_reason": finish_reason,
             "response_model": resolved_response_model,
+            **_gen_ai_model_attrs(
+                session_id=session_id,
+                provider_name=provider,
+                request_model=model,
+                response_model=resolved_response_model,
+            ),
             "output_length": assistant_content_chars,
             "assistant_tool_call_count": assistant_tool_call_count,
+            "gen_ai.response.id": _clip(response_payload.get("id"), limit=256),
+            "gen_ai.response.finish_reasons": [str(finish_reason)] if finish_reason else None,
+            "gen_ai.output.messages": _gen_ai_output_messages_attr(
+                output_message_candidates,
+                finish_reason=finish_reason,
+            ),
             **_usage_attrs(usage_summary),
         }
         self._runtime.set_span_attributes(active.span, attrs)
@@ -748,6 +1147,8 @@ class TraceManager:
             duration_ms=duration_ms,
             outcome=outcome,
             usage=usage,
+            error_type=None,
+            base_url=active.attrs.get("base_url"),
         )
         self._logs.emit_api_request(
             "Hermes model request finished",
@@ -759,6 +1160,109 @@ class TraceManager:
                 "response_model": resolved_response_model,
                 "finish_reason": finish_reason,
                 **_usage_attrs(usage_summary),
+            },
+        )
+
+    def record_api_request_error(
+        self,
+        session_id: str,
+        platform: str,
+        model: str,
+        provider: str,
+        api_call_count: int,
+        api_duration: float | None = None,
+        base_url: str | None = None,
+        status_code: int | None = None,
+        retry_count: int | None = None,
+        max_retries: int | None = None,
+        retryable: bool | None = None,
+        reason: str | None = None,
+        error: Any = None,
+        request: Any = None,
+        request_messages: list[Any] | None = None,
+        messages: list[Any] | None = None,
+        **_: Any,
+    ) -> None:
+        if self.is_child_session(session_id):
+            return
+        turn = self._ensure_turn(session_id=session_id, platform=platform, model=model)
+        self._mark_turn_activity(turn)
+        turn.provider_name = provider
+        turn.request_model = model
+        error_attrs = _api_error_attrs(
+            error,
+            status_code=status_code,
+            retry_count=retry_count,
+            max_retries=max_retries,
+            retryable=retryable,
+            reason=reason,
+            base_url=base_url,
+        )
+        request_body = _request_body_from_payload(request)
+        input_messages = _coerce_message_list(
+            request_body.get("messages"),
+            request_body.get("input"),
+            request_messages,
+            messages,
+        )
+        if input_messages:
+            error_attrs["gen_ai.input.messages"] = _gen_ai_input_messages_attr(input_messages)
+        if request_body:
+            error_attrs.update(_gen_ai_request_attrs(request_body))
+        terminal_error = _is_terminal_api_error(
+            retryable=retryable,
+            retry_count=retry_count,
+            max_retries=max_retries,
+        )
+        turn.api_error_seen = True
+        turn.api_error_terminal = turn.api_error_terminal or terminal_error
+
+        key = str(api_call_count)
+        active = turn.active_requests.pop(key, None)
+        if active is not None:
+            self._runtime.set_span_attributes(active.span, error_attrs)
+            active.attrs.update({key: value for key, value in error_attrs.items() if value is not None})
+            self._runtime.end_span(
+                active.span,
+                status_code="ERROR",
+                description=error_attrs.get("error_message") or error_attrs.get("error_type") or "api_request_error",
+            )
+
+        if terminal_error:
+            parent_attrs = {
+                **error_attrs,
+                "provider_name": provider,
+                "request_model": model,
+                **_gen_ai_model_attrs(
+                    session_id=session_id,
+                    provider_name=provider,
+                    request_model=model,
+                ),
+            }
+            self._runtime.set_span_attributes(turn.agent_span, parent_attrs)
+            self._runtime.set_span_attributes(turn.root_span, parent_attrs)
+
+        duration_ms = (api_duration or 0.0) * 1000.0
+        self._metrics.record_api_request(
+            session_id=session_id,
+            platform=platform,
+            request_model=model,
+            provider_name=provider,
+            response_model=model,
+            duration_ms=duration_ms,
+            outcome="error",
+            usage=None,
+            error_type=error_attrs.get("error.type"),
+            base_url=base_url,
+        )
+        self._logs.emit_api_request(
+            "Hermes model request failed",
+            {
+                "session_id": session_id,
+                "platform": platform,
+                "provider_name": provider,
+                "request_model": model,
+                **error_attrs,
             },
         )
 
@@ -796,7 +1300,14 @@ class TraceManager:
                 ):
                     item.key = tool_call_id
                     item.attrs["tool_call_id"] = tool_call_id
-                    self._runtime.set_span_attributes(item.span, {"tool_call_id": tool_call_id})
+                    item.attrs["gen_ai.tool.call.id"] = tool_call_id
+                    self._runtime.set_span_attributes(
+                        item.span,
+                        {
+                            "tool_call_id": tool_call_id,
+                            "gen_ai.tool.call.id": tool_call_id,
+                        },
+                    )
                     turn.active_tools[tool_call_id] = item
                     if key != tool_call_id:
                         turn.active_tools.pop(key, None)
@@ -824,7 +1335,10 @@ class TraceManager:
             "session_id": resolved_session_id,
             "platform": turn.platform,
             "tool_name": tool_name,
+            **_gen_ai_tool_attrs(resolved_session_id, tool_name),
             "tool_call_id": tool_call_id,
+            "gen_ai.tool.call.id": _clip(tool_call_id, limit=256),
+            "gen_ai.tool.call.arguments": _json_attr(args),
             "tool_phase": "call",
             "tool_arg_keys": ",".join(sorted(args.keys())),
             "tool_args_preview": args_preview,
@@ -898,7 +1412,9 @@ class TraceManager:
                 "tool_outcome": outcome,
                 "tool_result_status": result_status,
                 "tool_result_preview": _json_preview(parsed),
+                "gen_ai.tool.call.result": _json_attr(parsed),
                 "skill_name": skill_name,
+                "error.type": outcome if outcome == "error" else None,
             },
         )
         self._runtime.end_span(
@@ -987,6 +1503,7 @@ class TraceManager:
                 "session_id": turn.session_id,
                 "platform": turn.platform,
                 "skill_name": skill_name,
+                **_gen_ai_common_attrs(turn.session_id),
                 "skill_source": "runtime",
                 "skill_description": _clip(description),
                 "skill_content_length": len(content) if isinstance(content, str) else None,
@@ -1072,6 +1589,7 @@ class TraceManager:
                 "agent_version": AGENT_VERSION,
                 "span_kind": _resolve_span_kind(f"subagent:{display_role}"),
                 "session_id": parent_session_id,
+                **_gen_ai_agent_attrs(parent_session_id),
                 "subagent_role": display_role,
                 "subagent_runtime_role": runtime_role if runtime_role != display_role else None,
                 "outcome": child_status,
@@ -1119,6 +1637,7 @@ class TraceManager:
         final_platform = platform or turn.platform
         output_length = len(assistant_response or "")
         output_preview = _clip(assistant_response)
+        final_outcome = "failed" if outcome == "finalized" and turn.api_error_terminal else outcome
         aggregate_total_tokens = turn.aggregate_input_tokens + turn.aggregate_output_tokens
         aggregate_usage = {
             "input_tokens": turn.aggregate_input_tokens,
@@ -1131,20 +1650,23 @@ class TraceManager:
         }
         resolved_response_model = turn.response_model or turn.request_model or turn.model
         final_attrs = {
-            "final_status": outcome,
+            "final_status": final_outcome,
             "response_model": resolved_response_model,
             "provider_name": turn.provider_name,
+            **_gen_ai_agent_attrs(turn.session_id, turn.request_model or turn.model),
+            "gen_ai.provider.name": turn.provider_name,
+            "gen_ai.response.model": resolved_response_model,
             "output_length": output_length if assistant_response is not None else None,
             "output_preview": output_preview,
             **_usage_attrs(aggregate_usage),
         }
         self._runtime.set_span_attributes(turn.agent_span, final_attrs)
         self._runtime.set_span_attributes(turn.root_span, final_attrs)
-        status_code = "ERROR" if outcome in {"failed", "expired"} else "OK"
-        if outcome in {"interrupted", "superseded", "reset"}:
+        status_code = "ERROR" if final_outcome in {"failed", "expired"} else "OK"
+        if final_outcome in {"interrupted", "superseded", "reset"}:
             status_code = "UNSET"
-        self._runtime.end_span(turn.agent_span, status_code=status_code, description=outcome)
-        self._runtime.end_span(turn.root_span, status_code=status_code, description=outcome)
+        self._runtime.end_span(turn.agent_span, status_code=status_code, description=final_outcome)
+        self._runtime.end_span(turn.root_span, status_code=status_code, description=final_outcome)
         self._metrics.record_turn_finished(
             session_id=turn.session_id,
             platform=final_platform,
@@ -1153,16 +1675,16 @@ class TraceManager:
             response_model=resolved_response_model,
             request_type=turn.request_type,
             review_category=turn.review_category,
-            session_state=outcome,
+            session_state=final_outcome,
             usage=aggregate_usage,
-            outcome=outcome,
+            outcome=final_outcome,
             duration_ms=duration_ms,
         )
-        if outcome == "interrupted":
+        if final_outcome == "interrupted":
             self._metrics.record_interrupted_turn(turn.session_id, final_platform)
         self._logs.emit_session_event(
             "Hermes turn finished",
             session_id=turn.session_id,
             platform=final_platform,
-            outcome=outcome,
+            outcome=final_outcome,
         )

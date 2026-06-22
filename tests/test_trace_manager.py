@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from unittest.mock import patch
 
@@ -170,6 +171,7 @@ class TraceManagerTests(unittest.TestCase):
             platform="cli",
             model="gpt-test",
             provider="openai",
+            base_url="https://api.openai.com/v1",
             api_call_count=1,
             api_mode="responses",
         )
@@ -188,6 +190,24 @@ class TraceManagerTests(unittest.TestCase):
                 "cache_read_tokens": 2,
                 "cache_write_tokens": 1,
                 "total_tokens": 16,
+            },
+            response={
+                "id": "resp-1",
+                "model": "gpt-test",
+                "assistant_message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "tool-1",
+                            "type": "function",
+                            "function": {
+                                "name": "terminal",
+                                "arguments": '{"cmd":"echo hello"}',
+                            },
+                        }
+                    ],
+                },
             },
         )
         self.manager.start_tool_call(
@@ -215,7 +235,7 @@ class TraceManagerTests(unittest.TestCase):
 
         span_names = [span.name for span in self.runtime.spans]
         self.assertIn("hermes_request", span_names)
-        self.assertIn("agent_run", span_names)
+        self.assertIn("invoke_agent", span_names)
         self.assertIn("llm", span_names)
         self.assertIn("tool:terminal", span_names)
         self.assertTrue(all(span.ended for span in self.runtime.spans))
@@ -226,17 +246,40 @@ class TraceManagerTests(unittest.TestCase):
         self.assertEqual(llm_span.attributes["usage_cache_read_input_tokens"], 2)
         self.assertEqual(llm_span.attributes["usage_cache_write_input_tokens"], 1)
         self.assertEqual(llm_span.attributes["usage_cache_total_tokens"], 3)
+        self.assertEqual(llm_span.attributes["gen_ai.operation.name"], "chat")
+        self.assertEqual(llm_span.attributes["gen_ai.provider.name"], "openai")
+        self.assertEqual(llm_span.attributes["gen_ai.request.model"], "gpt-test")
+        self.assertEqual(llm_span.attributes["gen_ai.response.model"], "gpt-test")
+        self.assertEqual(llm_span.attributes["gen_ai.conversation.id"], "sess-1")
+        self.assertEqual(llm_span.attributes["gen_ai.usage.input_tokens"], 10)
+        self.assertEqual(llm_span.attributes["gen_ai.usage.output_tokens"], 3)
+        self.assertEqual(llm_span.attributes["gen_ai.usage.total_tokens"], 13)
+        self.assertEqual(llm_span.attributes["gen_ai.usage.cache_read.input_tokens"], 2)
+        self.assertEqual(llm_span.attributes["gen_ai.usage.cache_creation.input_tokens"], 1)
+        self.assertEqual(llm_span.attributes["gen_ai.usage.reasoning.output_tokens"], 0)
+        self.assertEqual(llm_span.attributes["gen_ai.response.id"], "resp-1")
+        self.assertEqual(llm_span.attributes["gen_ai.response.finish_reasons"], ["stop"])
+        output_messages = json.loads(llm_span.attributes["gen_ai.output.messages"])
+        self.assertEqual(output_messages[0]["role"], "assistant")
+        self.assertEqual(output_messages[0]["finish_reason"], "stop")
+        self.assertEqual(output_messages[0]["parts"][0]["type"], "tool_call")
+        self.assertEqual(output_messages[0]["parts"][0]["id"], "tool-1")
+        self.assertEqual(output_messages[0]["parts"][0]["name"], "terminal")
+        self.assertEqual(output_messages[0]["parts"][0]["arguments"], {"cmd": "echo hello"})
         self.assertEqual(llm_span.attributes["input_preview"], "hello")
         self.assertEqual(llm_span.attributes["output_preview"], "toolCall:terminal")
         self.assertEqual(llm_span.attributes["output_kind"], "tool_call")
         root_span = next(span for span in self.runtime.spans if span.name == "hermes_request")
-        agent_span = next(span for span in self.runtime.spans if span.name == "agent_run")
+        agent_span = next(span for span in self.runtime.spans if span.name == "invoke_agent")
         self.assertEqual(root_span.attributes["span_kind"], "request")
         self.assertEqual(agent_span.attributes["span_kind"], "agent")
         self.assertEqual(root_span.attributes["agent_runtime"], AGENT_RUNTIME)
         self.assertEqual(agent_span.attributes["agent_runtime"], AGENT_RUNTIME)
         self.assertEqual(root_span.attributes["agent_version"], AGENT_VERSION)
         self.assertEqual(agent_span.attributes["agent_version"], AGENT_VERSION)
+        self.assertEqual(agent_span.attributes["gen_ai.operation.name"], "invoke_agent")
+        self.assertEqual(agent_span.attributes["gen_ai.conversation.id"], "sess-1")
+        self.assertEqual(root_span.attributes["gen_ai.conversation.id"], "sess-1")
         self.assertEqual(root_span.attributes["output_preview"], "done")
         self.assertEqual(root_span.attributes["usage_input_tokens"], 10)
         self.assertEqual(root_span.attributes["usage_output_tokens"], 3)
@@ -252,6 +295,11 @@ class TraceManagerTests(unittest.TestCase):
         self.assertEqual(tool_span.attributes["tool_outcome"], "completed")
         self.assertEqual(tool_span.attributes["tool_command"], "echo hello")
         self.assertEqual(tool_span.attributes["tool_result_preview"], '{"output": "hello"}')
+        self.assertEqual(tool_span.attributes["gen_ai.operation.name"], "execute_tool")
+        self.assertEqual(tool_span.attributes["gen_ai.tool.name"], "terminal")
+        self.assertEqual(tool_span.attributes["gen_ai.tool.call.id"], "tool-1")
+        self.assertEqual(json.loads(tool_span.attributes["gen_ai.tool.call.arguments"]), {"cmd": "echo hello"})
+        self.assertEqual(json.loads(tool_span.attributes["gen_ai.tool.call.result"]), {"output": "hello"})
         self.assertNotIn("tool_result_status", tool_span.attributes)
         self.assertNotIn("usage_input_tokens", tool_span.attributes)
         self.assertNotIn("usage_output_tokens", tool_span.attributes)
@@ -270,6 +318,8 @@ class TraceManagerTests(unittest.TestCase):
             if call[2].get("operation_name") == "tool"
         )
         self.assertEqual(tool_operation_call[2]["model_name"], "gpt-test")
+        self.assertEqual(tool_operation_call[2]["gen_ai.operation.name"], "execute_tool")
+        self.assertEqual(tool_operation_call[2]["gen_ai.tool.name"], "terminal")
         request_count_call = self.manager._metrics._request_count.calls[0]
         self.assertEqual(request_count_call[2]["request_type"], "user_request")
         self.assertEqual(request_count_call[2]["session_state"], "completed")
@@ -286,6 +336,16 @@ class TraceManagerTests(unittest.TestCase):
         token_usage_calls = self.manager._metrics._token_usage.calls
         total_call = next(call for call in token_usage_calls if call[2]["token_type"] == "total")
         self.assertEqual(total_call[1], 13.0)
+        self.assertEqual(total_call[2]["gen_ai.operation.name"], "chat")
+        self.assertEqual(total_call[2]["gen_ai.provider.name"], "openai")
+        client_token_calls = self.manager._metrics._client_token_usage.calls
+        self.assertEqual({call[2]["gen_ai.token.type"] for call in client_token_calls}, {"input", "output"})
+        input_client_call = next(call for call in client_token_calls if call[2]["gen_ai.token.type"] == "input")
+        self.assertEqual(input_client_call[1], 10.0)
+        self.assertEqual(input_client_call[2]["server.address"], "api.openai.com")
+        client_duration_call = self.manager._metrics._client_operation_duration.calls[0]
+        self.assertEqual(client_duration_call[1], 0.25)
+        self.assertEqual(client_duration_call[2]["gen_ai.request.model"], "gpt-test")
 
     def test_session_metadata_fields_are_attached_to_root_and_agent_spans(self) -> None:
         self.session_metadata.items["sess-meta"] = SessionMetadata(
@@ -310,7 +370,7 @@ class TraceManagerTests(unittest.TestCase):
             platform="telegram",
         )
         root_span = next(span for span in self.runtime.spans if span.name == "hermes_request")
-        agent_span = next(span for span in self.runtime.spans if span.name == "agent_run")
+        agent_span = next(span for span in self.runtime.spans if span.name == "invoke_agent")
         for span in (root_span, agent_span):
             self.assertEqual(span.attributes["session_key"], "agent:main:telegram:group:chat-1:thread-2:user-3")
             self.assertEqual(span.attributes["agent_runtime"], AGENT_RUNTIME)
@@ -502,7 +562,7 @@ class TraceManagerTests(unittest.TestCase):
         )
 
         root_span = next(span for span in self.runtime.spans if span.name == "hermes_request")
-        agent_span = next(span for span in self.runtime.spans if span.name == "agent_run")
+        agent_span = next(span for span in self.runtime.spans if span.name == "invoke_agent")
         for span in (root_span, agent_span):
             self.assertEqual(span.attributes["request_type"], "auto_review")
             self.assertEqual(span.attributes["review_category"], "skill")
@@ -594,6 +654,30 @@ class TraceManagerTests(unittest.TestCase):
         request_messages = [
             {"role": "user", "content": [{"type": "input_text", "text": "当前是什么模型"}]},
         ]
+        request_payload = {
+            "method": "POST",
+            "body": {
+                "input": request_messages,
+                "instructions": "Be concise.",
+                "tools": [
+                    {
+                        "type": "function",
+                        "name": "read_file",
+                        "description": "Read a file",
+                    }
+                ],
+                "temperature": 0.2,
+                "top_p": 0.9,
+                "top_k": 40,
+                "n": 2,
+                "seed": 123,
+                "frequency_penalty": 0.1,
+                "presence_penalty": 0.3,
+                "max_tokens": 1024,
+                "stream": False,
+                "response_format": {"type": "json_object"},
+            },
+        }
         self.manager.start_api_request(
             session_id="sess-diag",
             platform="cli",
@@ -604,6 +688,7 @@ class TraceManagerTests(unittest.TestCase):
             approx_input_tokens=16675,
             request_char_count=7,
             request_messages=request_messages,
+            request=request_payload,
             message_count=1,
             tool_count=28,
         )
@@ -619,8 +704,28 @@ class TraceManagerTests(unittest.TestCase):
         self.assertEqual(llm_span.attributes["system_prompt_chars"], 23024)
         self.assertEqual(llm_span.attributes["system_prompt_bytes"], 25904)
         self.assertEqual(llm_span.attributes["system_prompt_hash"], "abc123def4567890")
+        input_messages = json.loads(llm_span.attributes["gen_ai.input.messages"])
+        self.assertEqual(input_messages[0]["role"], "user")
+        self.assertEqual(input_messages[0]["parts"][0]["type"], "text")
+        self.assertEqual(input_messages[0]["parts"][0]["content"], "当前是什么模型")
+        self.assertEqual(
+            json.loads(llm_span.attributes["gen_ai.system_instructions"]),
+            [{"type": "text", "content": "Be concise."}],
+        )
+        tool_definitions = json.loads(llm_span.attributes["gen_ai.tool.definitions"])
+        self.assertEqual(tool_definitions[0]["name"], "read_file")
+        self.assertEqual(llm_span.attributes["gen_ai.request.temperature"], 0.2)
+        self.assertEqual(llm_span.attributes["gen_ai.request.top_p"], 0.9)
+        self.assertEqual(llm_span.attributes["gen_ai.request.top_k"], 40)
+        self.assertEqual(llm_span.attributes["gen_ai.request.choice.count"], 2)
+        self.assertEqual(llm_span.attributes["gen_ai.request.seed"], 123)
+        self.assertEqual(llm_span.attributes["gen_ai.request.frequency_penalty"], 0.1)
+        self.assertEqual(llm_span.attributes["gen_ai.request.presence_penalty"], 0.3)
+        self.assertEqual(llm_span.attributes["gen_ai.request.max_tokens"], 1024)
+        self.assertEqual(llm_span.attributes["gen_ai.request.stream"], False)
+        self.assertEqual(llm_span.attributes["gen_ai.output.type"], "json_object")
         root_span = next(span for span in self.runtime.spans if span.name == "hermes_request")
-        agent_span = next(span for span in self.runtime.spans if span.name == "agent_run")
+        agent_span = next(span for span in self.runtime.spans if span.name == "invoke_agent")
         self.assertGreater(root_span.attributes["request_user_prompt_estimated_tokens"], 0)
         self.assertEqual(
             agent_span.attributes["request_user_prompt_estimated_tokens"],
@@ -1226,6 +1331,75 @@ class TraceManagerTests(unittest.TestCase):
         tool_metric_attrs = self.manager._metrics._tool_call_count.calls[0][2]
         self.assertEqual(tool_metric_attrs["tool_result_status"], "completed")
         self.assertEqual(tool_metric_attrs["outcome"], "completed")
+
+    def test_api_request_error_marks_llm_and_parent_spans(self) -> None:
+        self.manager.start_turn(
+            session_id="sess-auth-error",
+            user_message="today weather",
+            conversation_history=[],
+            is_first_turn=True,
+            model="gpt-test",
+            platform="cli",
+        )
+        self.manager.start_api_request(
+            session_id="sess-auth-error",
+            platform="cli",
+            model="gpt-test",
+            provider="openai-codex",
+            base_url="https://chatgpt.com/backend-api/codex",
+            api_call_count=1,
+            api_mode="responses",
+        )
+        self.manager.record_api_request_error(
+            session_id="sess-auth-error",
+            platform="cli",
+            model="gpt-test",
+            provider="openai-codex",
+            base_url="https://chatgpt.com/backend-api/codex",
+            api_call_count=1,
+            api_duration=3.32,
+            status_code=401,
+            retry_count=1,
+            max_retries=3,
+            retryable=False,
+            reason="token_invalidated",
+            error={
+                "type": "AuthenticationError",
+                "message": "HTTP 401: Your authentication token has been invalidated.",
+                "code": "token_invalidated",
+            },
+        )
+        self.manager.finalize_session("sess-auth-error", platform="cli", outcome="finalized")
+
+        llm_span = next(span for span in self.runtime.spans if span.name == "llm")
+        root_span = next(span for span in self.runtime.spans if span.name == "hermes_request")
+        agent_span = next(span for span in self.runtime.spans if span.name == "invoke_agent")
+
+        self.assertEqual(llm_span.status_code, "ERROR")
+        self.assertEqual(llm_span.attributes["error_type"], "AuthenticationError")
+        self.assertEqual(llm_span.attributes["error_code"], "token_invalidated")
+        self.assertEqual(llm_span.attributes["error.type"], "token_invalidated")
+        self.assertEqual(llm_span.attributes["http_status_code"], 401)
+        self.assertEqual(llm_span.attributes["retryable"], False)
+        self.assertEqual(llm_span.attributes["base_url"], "https://chatgpt.com/backend-api/codex")
+        self.assertEqual(llm_span.attributes["gen_ai.provider.name"], "openai-codex")
+        self.assertEqual(llm_span.attributes["gen_ai.operation.name"], "chat")
+        self.assertEqual(root_span.attributes["error_type"], "AuthenticationError")
+        self.assertEqual(root_span.attributes["error.type"], "token_invalidated")
+        self.assertEqual(agent_span.attributes["error_reason"], "token_invalidated")
+        self.assertEqual(root_span.attributes["final_status"], "failed")
+        self.assertEqual(agent_span.status_code, "ERROR")
+        self.assertEqual(root_span.status_code, "ERROR")
+
+        request_error_call = self.manager._metrics._operation_count.calls[0]
+        self.assertEqual(request_error_call[2]["operation_name"], "model")
+        self.assertEqual(request_error_call[2]["outcome"], "error")
+        self.assertEqual(request_error_call[2]["error.type"], "token_invalidated")
+        self.assertEqual(request_error_call[2]["gen_ai.provider.name"], "openai-codex")
+        self.assertEqual(request_error_call[2]["server.address"], "chatgpt.com")
+        request_count_call = self.manager._metrics._request_count.calls[0]
+        self.assertEqual(request_count_call[2]["session_state"], "failed")
+        self.assertEqual(self.runtime.logs[-1][1]["outcome"], "failed")
 
 
 if __name__ == "__main__":

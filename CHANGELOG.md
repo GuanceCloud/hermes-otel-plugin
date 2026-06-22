@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.4
+
+- Added OpenTelemetry GenAI semantic attributes for model input/output messages, request parameters, response metadata, system instructions, tool definitions, and tool call arguments/results.
+- Added `gen_ai.client.operation.duration` and `gen_ai.client.token.usage` metrics while retaining the existing `gen_ai.agent.*` model metrics for compatibility.
+- Added `api_request_error` hook handling so terminal provider failures are exported on `llm`, `invoke_agent`, and `hermes_request` spans and finalized error sessions are marked `failed`.
+- Renamed the primary agent execution span from `agent_run` to `invoke_agent`.
+- Updated the installer to resolve GitHub Releases from the repository `.../releases` root for both `latest` and versioned installs.
+- Added Chinese and English semantic field mapping documentation.
+
 ## 0.1.2
 
 - Fixed `agent_version` so it now reports the real Hermes Agent version instead of the plugin version.

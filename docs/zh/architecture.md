@@ -26,7 +26,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     A[pre_llm_call] --> A1[创建 hermes_request]
-    A --> A2[创建 agent_run]
+    A --> A2[创建 invoke_agent]
 
     B[pre_api_request] --> B1[创建 llm]
     C[post_api_request] --> C1[补 usage / finish_reason / response_model]
@@ -40,7 +40,7 @@ flowchart TD
     F[subagent_stop] --> F1[创建 subagent:role]
 
     G[post_llm_call] --> G1[关闭最后一个 llm]
-    G --> G2[关闭 agent_run]
+    G --> G2[关闭 invoke_agent]
     G --> G3[关闭 hermes_request]
 
     H[on_session_end / finalize / reset] --> H1[兜底清理 orphan spans]
@@ -58,7 +58,7 @@ sequenceDiagram
     U->>H: 用户输入
     H->>P: pre_llm_call
     P->>P: 创建 hermes_request
-    P->>P: 创建 agent_run
+    P->>P: 创建 invoke_agent
 
     H->>P: pre_api_request
     P->>P: 创建 llm
@@ -92,7 +92,7 @@ sequenceDiagram
     H->>P: post_llm_call
     P->>P: 回填最后 llm 的 output_preview
     P->>P: 关闭最后 llm
-    P->>P: 关闭 agent_run / hermes_request
+    P->>P: 关闭 invoke_agent / hermes_request
     P->>O: Flush traces / metrics / logs
 ```
 
@@ -103,7 +103,7 @@ sequenceDiagram
 ```mermaid
 flowchart TD
     A[hermes_request]
-    A --> B[agent_run]
+    A --> B[invoke_agent]
     B --> C1[llm]
     B --> C2[tool:read_file]
     B --> C3[tool:search_files]
@@ -117,7 +117,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     A[hermes_request]
-    A --> B[agent_run]
+    A --> B[invoke_agent]
     B --> C[tool:delegate_task]
     C --> D[subagent:leaf]
     B --> E[llm]

@@ -14,7 +14,7 @@
 - 这里的 `AI Agent` 指 Hermes 在一次用户输入下组织上下文、模型、工具、技能和子代理后完成任务的执行主体
 - 在 Hermes 的 trace 语义里：
   - `hermes_request`：一条用户输入对应的一次完整请求
-  - `agent_run`：这次请求里的 agent 主执行窗口
+  - `invoke_agent`：这次请求里的 agent 主执行窗口
   - `llm`：执行过程中一次真实模型调用
   - `tool:*`：执行过程中一次工具调用
   - `skill:*`：skill 在本次请求中的生效执行窗口
@@ -23,7 +23,7 @@
 因此：
 
 - `llm` 不等于 agent
-- `agent_run` 才是最接近 agent execution 的 span
+- `invoke_agent` 才是最接近 agent execution 的 span
 - 多次 `llm`、`tool:*`、`skill:*`、`subagent:*` 共同构成一次 agent 执行
 
 ## 术语说明
@@ -69,7 +69,7 @@
 ### 保留的 Span
 
 - `hermes_request`
-- `agent_run`
+- `invoke_agent`
 - `llm`
 - `tool:*`
 - `skill:*`
@@ -116,7 +116,7 @@
   - 汇总 token
   - 最终输出预览
 
-### `agent_run`
+### `invoke_agent`
 
 表示“一次 agent 实际执行窗口”。
 
@@ -132,7 +132,7 @@
 
 ## Session Metadata
 
-以下字段当前会写到 `hermes_request` 和 `agent_run`：
+以下字段当前会写到 `hermes_request` 和 `invoke_agent`：
 
 | 字段 | 含义 |
 | --- | --- |
@@ -163,8 +163,18 @@
 - 对应一次真实大模型调用
 - 记录该次模型调用的：
   - `provider_name`
+  - `gen_ai.provider.name`
   - `request_model`
+  - `gen_ai.request.model`
   - `response_model`
+  - `gen_ai.response.model`
+  - `gen_ai.operation.name=chat`
+  - `gen_ai.input.messages`
+  - `gen_ai.output.messages`
+  - `gen_ai.response.id`
+  - `gen_ai.response.finish_reasons`
+  - `gen_ai.system_instructions`
+  - `gen_ai.tool.definitions`
   - `system_prompt_*`
   - `request_payload_*`
   - `input_preview`
@@ -190,6 +200,11 @@
 - 对应一次工具执行
 - 记录该次调用的：
   - `tool_name`
+  - `gen_ai.tool.name`
+  - `gen_ai.operation.name=execute_tool`
+  - `gen_ai.tool.call.id`
+  - `gen_ai.tool.call.arguments`
+  - `gen_ai.tool.call.result`
   - `tool_call_id`
   - `tool_phase`
   - `tool_outcome`
@@ -248,7 +263,7 @@
 
 - 表示一次由主代理委派出去的子代理执行
 - 优先挂到触发它的 `tool:delegate_task` 下
-- 如果找不到 delegate tool，则回退挂到 `agent_run` 下
+- 如果找不到 delegate tool，则回退挂到 `invoke_agent` 下
 
 ## Status
 
@@ -279,7 +294,7 @@
 
 ## Final Status
 
-`final_status` 表示一条 `hermes_request` 或 `agent_run` 的最终业务结果。
+`final_status` 表示一条 `hermes_request` 或 `invoke_agent` 的最终业务结果。
 
 用途：
 
@@ -322,7 +337,7 @@
 | `skill_count` | 当前 skill 数量 |
 | `output_preview` | 输出摘要 |
 | `output_length` | 输出长度 |
-| `request_user_prompt_estimated_tokens` | 本轮请求中用户 prompt 的粗估 token，仅写入 `hermes_request` 和 `agent_run`，用于从总输入里扣除用户内容 |
+| `request_user_prompt_estimated_tokens` | 本轮请求中用户 prompt 的粗估 token，仅写入 `hermes_request` 和 `invoke_agent`，用于从总输入里扣除用户内容 |
 
 ### Request Type
 
@@ -475,7 +490,7 @@
 | span resource | span_kind |
 | --- | --- |
 | `hermes_request` | `request` |
-| `agent_run` | `agent` |
+| `invoke_agent` | `agent` |
 | `llm` | `llm` |
 | `tool:*` | `tool` |
 | `skill:*` | `skill` |
@@ -490,7 +505,7 @@
 - cache token 不并入 `usage_total_tokens`
 - cache token 单独写入 `usage_cache_*`
 - 如果 provider 返回的是累计 cache 计数，插件会归一成单次 `llm` 调用的增量
-- 根 span 和 `agent_run` 会聚合整轮请求内所有 `llm` 的 token
+- 根 span 和 `invoke_agent` 会聚合整轮请求内所有 `llm` 的 token
 - 如果要估算完整输入，可用 `usage_input_tokens + usage_cache_read_input_tokens + usage_cache_write_input_tokens`
 
 ## 已知边界

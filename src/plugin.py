@@ -215,6 +215,12 @@ class HermesOtelPlugin:
         assert self._traces is not None
         self._traces.finish_api_request(**kwargs)
 
+    def on_api_request_error(self, **kwargs: Any) -> None:
+        if not self._enabled():
+            return
+        assert self._traces is not None
+        self._traces.record_api_request_error(**kwargs)
+
     def on_pre_tool_call(self, **kwargs: Any) -> None:
         if not self._enabled():
             return
@@ -246,6 +252,7 @@ def register(ctx: Any) -> None:
     ctx.register_hook("post_llm_call", _PLUGIN.on_post_llm_call)
     ctx.register_hook("pre_api_request", _PLUGIN.on_pre_api_request)
     ctx.register_hook("post_api_request", _PLUGIN.on_post_api_request)
+    ctx.register_hook("api_request_error", _PLUGIN.on_api_request_error)
     ctx.register_hook("pre_tool_call", _PLUGIN.on_pre_tool_call)
     ctx.register_hook("post_tool_call", _PLUGIN.on_post_tool_call)
     ctx.register_hook("subagent_stop", _PLUGIN.on_subagent_stop)

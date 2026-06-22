@@ -15,10 +15,10 @@ The naming model follows the same product direction as `openclaw-otel-plugin`:
 Current boundary:
 
 - `gen_ai.client.*`
-  Hermes does not write custom metrics into this namespace.
-  If such metrics appear in the backend, treat them as OTEL-native client metrics rather than Hermes plugin custom metrics.
+  Used for OpenTelemetry GenAI client model-call metrics emitted by this plugin.
+  Hermes still keeps the older `gen_ai.agent.*` model metrics during the compatibility transition.
 - `gen_ai.agent.*`
-  Used for Hermes request, token, operation, session token, skill, and subagent metrics.
+  Used for Hermes request, legacy model operation/token metrics, session token, skill, and subagent metrics.
 - `gen_ai.runtime.*`
   Used for Hermes runtime process metrics currently observable through plugin hooks.
 
@@ -30,10 +30,15 @@ Current boundary:
 - `session_id`
 - `platform`
 - `provider_name`
+- `gen_ai.provider.name`
 - `request_model`
+- `gen_ai.request.model`
 - `response_model`
+- `gen_ai.response.model`
 - `operation_name`
+- `gen_ai.operation.name`
 - `token_type`
+- `gen_ai.token.type`
 - `tool_name`
 - `tool_result_status`
 - `skill_name`
@@ -53,10 +58,15 @@ Current boundary:
 | `session_id` | Hermes session id |
 | `platform` | Current runtime platform, such as `cli` |
 | `provider_name` | Model provider |
+| `gen_ai.provider.name` | OpenTelemetry GenAI provider name; currently mirrors `provider_name` |
 | `request_model` | Requested model |
+| `gen_ai.request.model` | OpenTelemetry GenAI requested model; mirrors `request_model` |
 | `response_model` | Response model |
+| `gen_ai.response.model` | OpenTelemetry GenAI response model; mirrors `response_model` |
 | `operation_name` | Operation category such as `model`, `tool`, `skill`, `subagent` |
+| `gen_ai.operation.name` | OpenTelemetry GenAI operation name such as `chat`, `execute_tool`, `invoke_agent` |
 | `token_type` | Token bucket such as `input`, `output`, `total` |
+| `gen_ai.token.type` | OpenTelemetry GenAI token bucket for client token metrics, currently `input` or `output` |
 | `tool_name` | Tool name |
 | `tool_result_status` | Explicit status extracted from tool result payload |
 | `skill_name` | Skill name |
@@ -72,7 +82,12 @@ Current boundary:
 
 ### GenAI Client
 
-Hermes does not currently emit custom `gen_ai.client.*` metrics.
+Hermes emits OpenTelemetry GenAI client metrics for model calls while retaining the older agent metrics.
+
+| metric | type | unit | tags | description |
+| --- | --- | --- | --- | --- |
+| `gen_ai.client.operation.duration` | Histogram | `s` | `agent_runtime`, `agent_version`, `session_id`, `platform`, `provider_name`, `request_model`, `response_model`, `outcome`, `gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.conversation.id`, `error.type`, `server.address`, `server.port` | Model-call duration using OpenTelemetry GenAI client semantics |
+| `gen_ai.client.token.usage` | Histogram | `{token}` | `agent_runtime`, `agent_version`, `session_id`, `platform`, `provider_name`, `request_model`, `response_model`, `token_type`, `gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.conversation.id`, `gen_ai.token.type` | Model-call input/output token usage using OpenTelemetry GenAI client semantics |
 
 ### GenAI Agent
 
@@ -124,7 +139,9 @@ The following parts are not currently emitted by Hermes because the plugin hook 
 ## Notes
 
 - `gen_ai.agent.token.usage` records per-model-call token usage.
+- `gen_ai.client.token.usage` records the same model-call token usage using standard GenAI attributes and only writes `input` / `output` token buckets.
 - `gen_ai.agent.session.token.*` records request-aggregated token totals at request finalization time.
 - `tool_result_status` remains distinct from normalized `outcome`.
 - `request_type=user_request` is the default classification.
 - `request_type=auto_review` is used for Hermes automatic review flows, and may also carry `review_category=skill`.
+- See [Semantic Field Mapping](semantic-field-mapping.md) for old-to-standard field relationships.

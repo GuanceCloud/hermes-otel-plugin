@@ -26,7 +26,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     A[pre_llm_call] --> A1[Create hermes_request]
-    A --> A2[Create agent_run]
+    A --> A2[Create invoke_agent]
 
     B[pre_api_request] --> B1[Create llm]
     C[post_api_request] --> C1[Attach usage / finish_reason / response_model]
@@ -40,7 +40,7 @@ flowchart TD
     F[subagent_stop] --> F1[Create subagent:role]
 
     G[post_llm_call] --> G1[Close final llm]
-    G --> G2[Close agent_run]
+    G --> G2[Close invoke_agent]
     G --> G3[Close hermes_request]
 
     H[on_session_end / finalize / reset] --> H1[Fallback cleanup for orphan spans]
@@ -58,7 +58,7 @@ sequenceDiagram
     U->>H: User input
     H->>P: pre_llm_call
     P->>P: Create hermes_request
-    P->>P: Create agent_run
+    P->>P: Create invoke_agent
 
     H->>P: pre_api_request
     P->>P: Create llm
@@ -92,7 +92,7 @@ sequenceDiagram
     H->>P: post_llm_call
     P->>P: Backfill final llm output_preview
     P->>P: Close final llm
-    P->>P: Close agent_run / hermes_request
+    P->>P: Close invoke_agent / hermes_request
     P->>O: Flush traces / metrics / logs
 ```
 
@@ -103,7 +103,7 @@ Normal request hierarchy:
 ```mermaid
 flowchart TD
     A[hermes_request]
-    A --> B[agent_run]
+    A --> B[invoke_agent]
     B --> C1[llm]
     B --> C2[tool:read_file]
     B --> C3[tool:search_files]
@@ -117,7 +117,7 @@ With a delegated subagent:
 ```mermaid
 flowchart TD
     A[hermes_request]
-    A --> B[agent_run]
+    A --> B[invoke_agent]
     B --> C[tool:delegate_task]
     C --> D[subagent:leaf]
     B --> E[llm]

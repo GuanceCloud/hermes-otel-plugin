@@ -14,7 +14,7 @@
 - Here, `AI Agent` means the execution entity Hermes assembles for one user input by combining context, model calls, tools, skills, and delegated subagents.
 - In Hermes trace semantics:
   - `hermes_request`: one complete request for one user input
-  - `agent_run`: the primary execution window of that request
+  - `invoke_agent`: the primary execution window of that request
   - `llm`: one real model call during execution
   - `tool:*`: one tool call during execution
   - `skill:*`: the effective execution window of a skill during the request
@@ -23,7 +23,7 @@
 Therefore:
 
 - `llm` is not the same thing as the agent
-- `agent_run` is the span closest to agent execution
+- `invoke_agent` is the span closest to agent execution
 - Multiple `llm`, `tool:*`, `skill:*`, and `subagent:*` spans together form one agent run
 
 ## Terminology
@@ -69,7 +69,7 @@ Additional notes:
 ### Retained Spans
 
 - `hermes_request`
-- `agent_run`
+- `invoke_agent`
 - `llm`
 - `tool:*`
 - `skill:*`
@@ -116,7 +116,7 @@ Purpose:
   - aggregated tokens
   - final output preview
 
-### `agent_run`
+### `invoke_agent`
 
 Represents the main execution window of one agent request.
 
@@ -132,7 +132,7 @@ Purpose:
 
 ## Session Metadata
 
-The following fields are currently attached to `hermes_request` and `agent_run`:
+The following fields are currently attached to `hermes_request` and `invoke_agent`:
 
 | field | meaning |
 | --- | --- |
@@ -163,8 +163,18 @@ Purpose:
 - One real model call
 - Carries:
   - `provider_name`
+  - `gen_ai.provider.name`
   - `request_model`
+  - `gen_ai.request.model`
   - `response_model`
+  - `gen_ai.response.model`
+  - `gen_ai.operation.name=chat`
+  - `gen_ai.input.messages`
+  - `gen_ai.output.messages`
+  - `gen_ai.response.id`
+  - `gen_ai.response.finish_reasons`
+  - `gen_ai.system_instructions`
+  - `gen_ai.tool.definitions`
   - `system_prompt_*`
   - `request_payload_*`
   - `input_preview`
@@ -190,6 +200,11 @@ Purpose:
 - One tool execution
 - Carries:
   - `tool_name`
+  - `gen_ai.tool.name`
+  - `gen_ai.operation.name=execute_tool`
+  - `gen_ai.tool.call.id`
+  - `gen_ai.tool.call.arguments`
+  - `gen_ai.tool.call.result`
   - `tool_call_id`
   - `tool_phase`
   - `tool_outcome`
@@ -248,7 +263,7 @@ Purpose:
 
 - One delegated child-agent execution
 - Prefer attaching to the triggering `tool:delegate_task`
-- Fall back to `agent_run` if no delegate tool span can be found
+- Fall back to `invoke_agent` if no delegate tool span can be found
 
 ## Status
 
@@ -279,7 +294,7 @@ Usage guidance:
 
 ## Final Status
 
-`final_status` represents the final business outcome of a `hermes_request` or `agent_run`.
+`final_status` represents the final business outcome of a `hermes_request` or `invoke_agent`.
 
 Purpose:
 
@@ -322,7 +337,7 @@ Usage guidance:
 | `skill_count` | Related skill count |
 | `output_preview` | Output summary |
 | `output_length` | Output length |
-| `request_user_prompt_estimated_tokens` | Rough token estimate of the user prompt for this turn. This is only attached to `hermes_request` and `agent_run`, and is intended for subtracting user content from the total input |
+| `request_user_prompt_estimated_tokens` | Rough token estimate of the user prompt for this turn. This is only attached to `hermes_request` and `invoke_agent`, and is intended for subtracting user content from the total input |
 
 ### Request Type
 
@@ -475,7 +490,7 @@ Current Hermes mapping:
 | span resource | span_kind |
 | --- | --- |
 | `hermes_request` | `request` |
-| `agent_run` | `agent` |
+| `invoke_agent` | `agent` |
 | `llm` | `llm` |
 | `tool:*` | `tool` |
 | `skill:*` | `skill` |
@@ -490,7 +505,7 @@ Notes:
 - Cache tokens are not merged into `usage_total_tokens`
 - Cache tokens are recorded separately in `usage_cache_*`
 - If the provider returns cumulative cache counters, the plugin normalizes them into per-`llm` deltas
-- The root span and `agent_run` aggregate tokens across all `llm` spans inside the request
+- The root span and `invoke_agent` aggregate tokens across all `llm` spans inside the request
 - To estimate the full prompt size, use `usage_input_tokens + usage_cache_read_input_tokens + usage_cache_write_input_tokens`
 
 ## Known Boundaries

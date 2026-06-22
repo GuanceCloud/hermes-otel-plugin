@@ -57,6 +57,7 @@ class PluginRegisterTests(unittest.TestCase):
                 "post_llm_call",
                 "pre_api_request",
                 "post_api_request",
+                "api_request_error",
                 "pre_tool_call",
                 "post_tool_call",
                 "subagent_stop",
