@@ -132,7 +132,7 @@ or:
 
 ```bash
 OSS_ENDPOINT=https://github.com/GuanceCloud/hermes-otel-plugin/releases \
-bash scripts/install.sh v0.1.3 \
+bash scripts/install.sh v0.1.5 \
   --type otlp \
   --endpoint http://127.0.0.1:9529/otel
 ```

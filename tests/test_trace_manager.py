@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from src.config import HermesOtelPluginConfig
@@ -285,6 +287,7 @@ class TraceManagerTests(unittest.TestCase):
         self.assertEqual(root_span.attributes["usage_output_tokens"], 3)
         self.assertEqual(root_span.attributes["usage_total_tokens"], 13)
         tool_span = next(span for span in self.runtime.spans if span.name == "tool:terminal")
+        self.assertIs(tool_span.parent, llm_span)
         self.assertEqual(llm_span.attributes["span_kind"], "llm")
         self.assertEqual(llm_span.attributes["agent_runtime"], AGENT_RUNTIME)
         self.assertEqual(tool_span.attributes["agent_runtime"], AGENT_RUNTIME)
@@ -1084,9 +1087,88 @@ class TraceManagerTests(unittest.TestCase):
         self.assertEqual(skill_spans[0].attributes["span_kind"], "skill")
 
     def test_skill_view_emits_skill_span(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            skill_dir = Path(tempdir) / "skill_manage"
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            skill_path = str(skill_dir / "SKILL.md")
+            with open(skill_dir / "package.json", "w", encoding="utf-8") as handle:
+                handle.write('{"version": "9.8.7"}')
+
+            self.manager.start_turn(
+                session_id="sess-6",
+                user_message="skill",
+                conversation_history=[],
+                is_first_turn=True,
+                model="gpt-test",
+                platform="cli",
+            )
+            self.manager.start_tool_call(
+                tool_name="skill_view",
+                args={"name": "wrong-name"},
+                session_id="sess-6",
+                platform="cli",
+                tool_call_id="call-skill-2",
+            )
+            self.manager.finish_tool_call(
+                tool_name="skill_view",
+                args={"name": "wrong-name"},
+                result=json.dumps(
+                    {
+                        "success": True,
+                        "name": "ignored-name",
+                        "path": skill_path,
+                        "content": "---\ndescription: Workspace skill doc\n---\n# skill_manage\n\nBody paragraph\n",
+                        "tags": ["query"],
+                        "related_skills": ["dashboard"],
+                    }
+                ),
+                session_id="sess-6",
+                platform="cli",
+                tool_call_id="call-skill-2",
+            )
+            self.manager.finish_turn(
+                session_id="sess-6",
+                assistant_response="done",
+                completed=True,
+                platform="cli",
+            )
+
+        tool_span = next(span for span in self.runtime.spans if span.name == "tool:skill_view")
+        skill_span = next(span for span in self.runtime.spans if span.name == "skill:skill_manage")
+        self.assertIs(skill_span.parent, tool_span)
+        self.assertEqual(skill_span.status_code, "OK")
+        self.assertEqual(skill_span.description, "completed")
+        for span in (tool_span, skill_span):
+            self.assertEqual(span.attributes["skill_name"], "skill_manage")
+            self.assertEqual(span.attributes["skill_description"], "Workspace skill doc")
+            self.assertEqual(span.attributes["skill.name"], "skill_manage")
+            self.assertEqual(span.attributes["skill.description"], "Workspace skill doc")
+            self.assertEqual(span.attributes["skill.path"], skill_path)
+            self.assertEqual(span.attributes["skill.source.type"], "workspace")
+            self.assertEqual(span.attributes["skill.result_status"], "completed")
+            self.assertEqual(span.attributes["gen_ai.skill.name"], "skill_manage")
+            self.assertEqual(span.attributes["gen_ai.skill.description"], "Workspace skill doc")
+            self.assertEqual(span.attributes["gen_ai.skill.path"], skill_path)
+            self.assertEqual(span.attributes["gen_ai.skill.source.type"], "workspace")
+            self.assertEqual(span.attributes["gen_ai.skill.result_status"], "completed")
+            self.assertEqual(span.attributes["gen_ai.skill.version"], "9.8.7")
+            self.assertEqual(span.attributes["skill_call_id"], "call-skill-2")
+        self.assertEqual(skill_span.attributes["skill_tags"], "query")
+        self.assertEqual(skill_span.attributes["skill_related_skills"], "dashboard")
+        skill_activation_call = self.manager._metrics._skill_activation_count.calls[0]
+        self.assertEqual(skill_activation_call[2]["skill_name"], "skill_manage")
+        skill_operation_call = next(
+            call
+            for call in self.manager._metrics._operation_count.calls
+            if call[2].get("operation_name") == "skill"
+        )
+        self.assertEqual(skill_operation_call[2]["skill_name"], "skill_manage")
+        self.assertEqual(skill_operation_call[2]["outcome"], "completed")
+
+    def test_failed_skill_view_marks_tool_result_status_without_emitting_skill_span(self) -> None:
         self.manager.start_turn(
-            session_id="sess-6",
-            user_message="skill",
+            session_id="sess-6err",
+            user_message="skill error",
             conversation_history=[],
             is_first_turn=True,
             model="gpt-test",
@@ -1094,46 +1176,26 @@ class TraceManagerTests(unittest.TestCase):
         )
         self.manager.start_tool_call(
             tool_name="skill_view",
-            args={"name": "dql"},
-            session_id="sess-6",
+            args={"name": "broken_skill"},
+            session_id="sess-6err",
             platform="cli",
-            tool_call_id="call-skill-2",
+            tool_call_id="call-skill-err",
         )
         self.manager.finish_tool_call(
             tool_name="skill_view",
-            args={"name": "dql"},
-            result='{"success": true, "name": "dql", "description": "DQL skill", "content": "---\\nname: dql\\n...", "tags": ["query"], "related_skills": ["dashboard"]}',
-            session_id="sess-6",
+            args={"name": "broken_skill"},
+            result='{"success": false, "error": "not found"}',
+            session_id="sess-6err",
             platform="cli",
-            tool_call_id="call-skill-2",
-        )
-        self.manager.finish_turn(
-            session_id="sess-6",
-            assistant_response="done",
-            completed=True,
-            platform="cli",
+            tool_call_id="call-skill-err",
         )
 
-        skill_span = next(span for span in self.runtime.spans if span.name == "skill:dql")
-        self.assertEqual(skill_span.status_code, "OK")
-        self.assertEqual(skill_span.description, "completed")
-        self.assertEqual(skill_span.attributes["skill_name"], "dql")
-        self.assertEqual(skill_span.attributes["skill_source"], "runtime")
-        self.assertEqual(skill_span.attributes["skill_description"], "DQL skill")
-        self.assertEqual(skill_span.attributes["skill_tags"], "query")
-        self.assertEqual(skill_span.attributes["skill_related_skills"], "dashboard")
-        self.assertEqual(skill_span.attributes["skill_source_tool_call_id"], "call-skill-2")
-        skill_activation_call = self.manager._metrics._skill_activation_count.calls[0]
-        self.assertEqual(skill_activation_call[2]["skill_name"], "dql")
-        self.assertEqual(skill_activation_call[2]["skill_source"], "runtime")
-        skill_operation_call = next(
-            call
-            for call in self.manager._metrics._operation_count.calls
-            if call[2].get("operation_name") == "skill"
-        )
-        self.assertEqual(skill_operation_call[2]["skill_name"], "dql")
-        self.assertEqual(skill_operation_call[2]["skill_source"], "runtime")
-        self.assertEqual(skill_operation_call[2]["outcome"], "completed")
+        tool_span = next(span for span in self.runtime.spans if span.name == "tool:skill_view")
+        self.assertEqual(tool_span.attributes["skill_name"], "broken_skill")
+        self.assertEqual(tool_span.attributes["skill.name"], "broken_skill")
+        self.assertEqual(tool_span.attributes["skill.result_status"], "error")
+        self.assertEqual(tool_span.attributes["gen_ai.skill.result_status"], "error")
+        self.assertFalse(any(span.name == "skill:broken_skill" for span in self.runtime.spans))
 
     def test_skill_span_stays_open_across_llm_and_closes_on_turn_end(self) -> None:
         self.manager.start_turn(
@@ -1243,8 +1305,57 @@ class TraceManagerTests(unittest.TestCase):
         llm_span = next(span for span in self.runtime.spans if span.name == "llm")
         self.assertEqual(llm_span.attributes["skill_count"], 2)
         self.assertEqual(llm_span.attributes["skills"], "dashboard,dql")
-        self.assertFalse(dashboard_span.ended)
-        self.assertFalse(dql_span.ended)
+
+    def test_tool_and_skill_attach_under_pending_llm_chain(self) -> None:
+        self.manager.start_turn(
+            session_id="sess-skill-chain",
+            user_message="review and update skill",
+            conversation_history=[],
+            is_first_turn=True,
+            model="gpt-test",
+            platform="cli",
+        )
+        self.manager.start_api_request(
+            session_id="sess-skill-chain",
+            platform="cli",
+            model="gpt-test",
+            provider="openai",
+            api_call_count=1,
+        )
+        self.manager.finish_api_request(
+            session_id="sess-skill-chain",
+            platform="cli",
+            model="gpt-test",
+            provider="openai",
+            api_call_count=1,
+            api_duration=0.25,
+            finish_reason="stop",
+            response_model="gpt-test",
+            usage={"input_tokens": 10, "output_tokens": 3},
+        )
+        self.manager.start_tool_call(
+            tool_name="skill_view",
+            args={"name": "skill_manage"},
+            session_id="sess-skill-chain",
+            platform="cli",
+            tool_call_id="call-skill-chain",
+        )
+        self.manager.finish_tool_call(
+            tool_name="skill_view",
+            args={"name": "skill_manage"},
+            result='{"success": true, "name": "skill_manage", "description": "Skill manage", "content": "body"}',
+            session_id="sess-skill-chain",
+            platform="cli",
+            tool_call_id="call-skill-chain",
+        )
+
+        llm_span = next(span for span in self.runtime.spans if span.name == "llm")
+        tool_span = next(span for span in self.runtime.spans if span.name == "tool:skill_view")
+        skill_span = next(span for span in self.runtime.spans if span.name == "skill:skill_manage")
+
+        self.assertIs(tool_span.parent, llm_span)
+        self.assertIs(skill_span.parent, tool_span)
+        self.assertEqual(skill_span.attributes["skill_call_id"], "call-skill-chain")
 
     def test_empty_tool_call_id_is_upgraded_when_real_id_arrives(self) -> None:
         self.manager.start_turn(

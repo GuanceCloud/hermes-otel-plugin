@@ -460,14 +460,32 @@ These fields exist in OpenClaw, but Hermes cannot reliably provide them from cur
 
 ## Skill Attributes
 
-| attribute | description |
-| --- | --- |
-| `skill_name` | Skill name |
-| `skill_description` | Skill description |
-| `skill_tags` | Skill tags |
-| `skill_related_skills` | Related skills |
-| `skill_content_length` | Skill content length |
-| `skill_source_tool_call_id` | `skill_view` tool call id that triggered the skill span |
+As of 2026-06-25, `skill` still has no formally adopted first-class OpenTelemetry GenAI attribute set. This plugin keeps the compatible `skill.*` fields and also emits `gen_ai.skill.*` project extensions. Among them, `gen_ai.skill.name`, `gen_ai.skill.description`, and `gen_ai.skill.version` follow the direction of current community proposals, but they are not official standard fields yet.
+
+| attribute | meaning | common spans |
+| --- | --- | --- |
+| `skill.name` | Skill name, preferring the directory name that contains `SKILL.md` | `skill:*`, `tool:*` |
+| `skill.description` | Skill description, preferring `description` in `SKILL.md` frontmatter and otherwise falling back to the first explanatory paragraph in the body | `skill:*`, `tool:*` |
+| `skill.path` | Absolute path of the skill entry file, currently the detected `.../SKILL.md` | `skill:*`, `tool:*` |
+| `skill_call_id` | `skill_view` tool call id used to correlate the skill span with the triggering tool call | `skill:*`, `tool:*` |
+| `skill.source.type` | Skill source type, currently normalized to `system`, `user`, or `workspace` | `skill:*`, `tool:*` |
+| `skill.result_status` | Skill load result, mapped from whether the `skill_view` tool errored as `completed` or `error` | `skill:*`, `tool:*` |
+| `gen_ai.skill.name` | `gen_ai.*` extension mirror of `skill.name` | `skill:*`, `tool:*` |
+| `gen_ai.skill.path` | `gen_ai.*` extension mirror of `skill.path` | `skill:*`, `tool:*` |
+| `gen_ai.skill.source.type` | `gen_ai.*` extension mirror of `skill.source.type` | `skill:*`, `tool:*` |
+| `gen_ai.skill.result_status` | `gen_ai.*` extension mirror of `skill.result_status` | `skill:*`, `tool:*` |
+| `gen_ai.skill.description` | `gen_ai.*` extension mirror of `skill.description` | `skill:*`, `tool:*` |
+| `gen_ai.skill.version` | Skill version, preferring `version` in `SKILL.md` frontmatter and otherwise falling back to `package.json.version` in the skill project; omitted when no explicit metadata exists | `skill:*`, `tool:*` |
+
+Additional fields:
+
+| attribute | description | common spans |
+| --- | --- | --- |
+| `skill_name` | Compatibility field for `skill.name` | `skill:*`, `tool:*` |
+| `skill_description` | Compatibility field for `skill.description` | `skill:*`, `tool:*` |
+| `skill_tags` | Skill tags | `skill:*` |
+| `skill_related_skills` | Related skills | `skill:*` |
+| `skill_content_length` | Skill content length | `skill:*` |
 
 ## Subagent Attributes
 

@@ -42,7 +42,6 @@ Current boundary:
 - `tool_name`
 - `tool_result_status`
 - `skill_name`
-- `skill_source`
 - `model_name`
 - `subagent_role`
 - `outcome`
@@ -70,7 +69,6 @@ Current boundary:
 | `tool_name` | Tool name |
 | `tool_result_status` | Explicit status extracted from tool result payload |
 | `skill_name` | Skill name |
-| `skill_source` | Skill source, currently `runtime` |
 | `model_name` | Model attribution tag used for tool operation metrics |
 | `subagent_role` | Child agent role |
 | `outcome` | Normalized outcome such as `completed`, `error`, `failed`, `interrupted` |
@@ -96,14 +94,14 @@ Hermes emits OpenTelemetry GenAI client metrics for model calls while retaining 
 | `gen_ai.agent.request.count` | Counter | - | `agent_runtime`, `session_id`, `platform`, `provider_name`, `request_model`, `response_model`, `session_state`, `outcome`, `request_type`, `review_category` | Count of completed Hermes requests |
 | `gen_ai.agent.request.duration` | Histogram | `ms` | `agent_runtime`, `session_id`, `platform`, `provider_name`, `request_model`, `response_model`, `session_state`, `outcome`, `request_type`, `review_category` | Total duration of a Hermes request |
 | `gen_ai.agent.token.usage` | Histogram | `{token}` | `agent_runtime`, `session_id`, `platform`, `provider_name`, `request_model`, `response_model`, `token_type` | Per-model-call token usage |
-| `gen_ai.agent.operation.count` | Counter | - | Base: `agent_runtime`, `session_id`, `outcome`, `operation_name`<br>`operation_name=model`: `platform`, `provider_name`, `request_model`, `response_model`<br>`operation_name=tool`: `platform`, `tool_name`, `skill_name`, `model_name`, `tool_result_status`<br>`operation_name=skill`: `skill_name`, `skill_source`<br>`operation_name=subagent`: `subagent_role` | Operation count by model, tool, skill, and subagent |
-| `gen_ai.agent.operation.duration` | Histogram | `ms` | Base: `agent_runtime`, `session_id`, `outcome`, `operation_name`<br>`operation_name=model`: `platform`, `provider_name`, `request_model`, `response_model`<br>`operation_name=tool`: `platform`, `tool_name`, `skill_name`, `model_name`, `tool_result_status`<br>`operation_name=skill`: `skill_name`, `skill_source`<br>`operation_name=subagent`: `subagent_role` | Operation duration by model, tool, skill, and subagent |
+| `gen_ai.agent.operation.count` | Counter | - | Base: `agent_runtime`, `session_id`, `outcome`, `operation_name`<br>`operation_name=model`: `platform`, `provider_name`, `request_model`, `response_model`<br>`operation_name=tool`: `platform`, `tool_name`, `skill_name`, `model_name`, `tool_result_status`<br>`operation_name=skill`: `skill_name`<br>`operation_name=subagent`: `subagent_role` | Operation count by model, tool, skill, and subagent |
+| `gen_ai.agent.operation.duration` | Histogram | `ms` | Base: `agent_runtime`, `session_id`, `outcome`, `operation_name`<br>`operation_name=model`: `platform`, `provider_name`, `request_model`, `response_model`<br>`operation_name=tool`: `platform`, `tool_name`, `skill_name`, `model_name`, `tool_result_status`<br>`operation_name=skill`: `skill_name`<br>`operation_name=subagent`: `subagent_role` | Operation duration by model, tool, skill, and subagent |
 | `gen_ai.agent.session.token.input` | Counter | `{token}` | `agent_runtime`, `session_id`, `provider_name`, `request_model` | Aggregated input tokens written once when a Hermes request finishes |
 | `gen_ai.agent.session.token.output` | Counter | `{token}` | `agent_runtime`, `session_id`, `provider_name`, `request_model` | Aggregated output tokens written once when a Hermes request finishes |
 | `gen_ai.agent.session.token.total` | Counter | `{token}` | `agent_runtime`, `session_id`, `provider_name`, `request_model` | Aggregated total tokens written once when a Hermes request finishes |
 | `gen_ai.agent.session.token.usage` | Counter | `{token}` | `agent_runtime`, `session_id`, `provider_name`, `request_model`, `token_type` | Aggregated session token counters by token type |
 | `gen_ai.agent.session.trace.count` | Counter | - | `agent_runtime`, `session_id`, `platform`, `request_model`, `request_type` | Count of traces started by the plugin |
-| `gen_ai.agent.skill.activation.count` | Counter | - | `agent_runtime`, `session_id`, `skill_name`, `skill_source` | Number of successful skill activations |
+| `gen_ai.agent.skill.activation.count` | Counter | - | `agent_runtime`, `session_id`, `skill_name` | Number of successful skill activations |
 | `gen_ai.agent.subagent.count` | Counter | - | `agent_runtime`, `session_id`, `subagent_role`, `outcome`, `operation_name` | Number of observed subagent completions |
 | `gen_ai.agent.subagent.duration` | Histogram | `ms` | `agent_runtime`, `session_id`, `subagent_role`, `outcome`, `operation_name` | Duration of observed subagent executions |
 

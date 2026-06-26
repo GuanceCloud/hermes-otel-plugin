@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 import time
 from typing import Any
 
@@ -461,13 +462,243 @@ def _extract_tool_target(tool_name: str, args: dict[str, Any]) -> str | None:
 def _extract_tool_skill_name(tool_name: str, args: dict[str, Any], parsed: Any) -> str | None:
     if str(tool_name).strip().lower() != "skill_view":
         return None
-    parsed_name = parsed.get("name") if isinstance(parsed, dict) else None
+    parsed_name = _extract_skill_name_from_payload(args, parsed)
     if isinstance(parsed_name, str) and parsed_name.strip():
         return parsed_name.strip()
     arg_name = args.get("name")
     if isinstance(arg_name, str) and arg_name.strip():
         return arg_name.strip()
     return None
+
+
+def _payload_mapping_value(payload: Any, *path: str) -> Any:
+    current = payload
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def _strip_optional_quotes(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+        return value[1:-1].strip()
+    return value
+
+
+def _extract_skill_frontmatter(content: Any) -> tuple[dict[str, str], str]:
+    if not isinstance(content, str):
+        return {}, ""
+    text = content.lstrip("\ufeff")
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}, content
+    end_index = None
+    for index, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            end_index = index
+            break
+    if end_index is None:
+        return {}, content
+    metadata: dict[str, str] = {}
+    for line in lines[1:end_index]:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or ":" not in stripped:
+            continue
+        key, raw_value = stripped.split(":", 1)
+        key = key.strip()
+        value = _strip_optional_quotes(raw_value.strip())
+        if key and value:
+            metadata[key] = value
+    return metadata, "\n".join(lines[end_index + 1 :])
+
+
+def _first_markdown_paragraph(content: str) -> str | None:
+    if not content:
+        return None
+    lines = content.splitlines()
+    paragraph: list[str] = []
+    in_code_block = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_block = not in_code_block
+            continue
+        if in_code_block:
+            continue
+        if not stripped:
+            if paragraph:
+                break
+            continue
+        if not paragraph and stripped.startswith("#"):
+            continue
+        paragraph.append(stripped)
+    if not paragraph:
+        return None
+    return _clip(" ".join(paragraph), limit=2048)
+
+
+def _extract_skill_name_from_path(skill_path: str | None) -> str | None:
+    if not skill_path:
+        return None
+    candidate = Path(skill_path)
+    if candidate.name.lower() == "skill.md":
+        return _clip(candidate.parent.name, limit=256)
+    return None
+
+
+def _normalize_skill_source_type(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower()
+    if normalized in {"system", "user", "workspace"}:
+        return normalized
+    return None
+
+
+def _infer_skill_source_type(skill_path: str | None) -> str | None:
+    if not skill_path:
+        return None
+    normalized = skill_path.replace("\\", "/")
+    if "/.codex/skills/.system/" in normalized or normalized.endswith("/.codex/skills/.system/SKILL.md"):
+        return "system"
+    if "/.codex/skills/" in normalized:
+        return "user"
+    return "workspace"
+
+
+def _nearest_package_json_version(skill_path: str | None) -> str | None:
+    if not skill_path:
+        return None
+    try:
+        current = Path(skill_path).expanduser()
+    except Exception:
+        return None
+    if current.name.lower() == "skill.md":
+        current = current.parent
+    for directory in [current, *current.parents]:
+        candidate = directory / "package.json"
+        if not candidate.is_file():
+            continue
+        try:
+            payload = json.loads(candidate.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        version = payload.get("version") if isinstance(payload, dict) else None
+        if isinstance(version, str) and version.strip():
+            return _clip(version, limit=256)
+    return None
+
+
+def _extract_skill_name_from_payload(args: dict[str, Any], parsed: Any) -> str | None:
+    parsed_path = _extract_skill_path(parsed)
+    path_name = _extract_skill_name_from_path(parsed_path)
+    if path_name:
+        return path_name
+    parsed_name = parsed.get("name") if isinstance(parsed, dict) else None
+    if isinstance(parsed_name, str) and parsed_name.strip():
+        return _clip(parsed_name, limit=256)
+    arg_name = args.get("name")
+    if isinstance(arg_name, str) and arg_name.strip():
+        return _clip(arg_name, limit=256)
+    return None
+
+
+def _extract_skill_path(parsed: Any) -> str | None:
+    if not isinstance(parsed, dict):
+        return None
+    for value in (
+        parsed.get("path"),
+        parsed.get("skill_path"),
+        parsed.get("entry_path"),
+        parsed.get("file_path"),
+        _payload_mapping_value(parsed, "source", "path"),
+        _payload_mapping_value(parsed, "metadata", "path"),
+    ):
+        if isinstance(value, str) and value.strip():
+            return _clip(value, limit=4096)
+    return None
+
+
+def _extract_skill_description(parsed: Any, content: Any) -> str | None:
+    frontmatter, body = _extract_skill_frontmatter(content)
+    description = parsed.get("description") if isinstance(parsed, dict) else None
+    if isinstance(description, str) and description.strip():
+        return _clip(description, limit=2048)
+    frontmatter_description = frontmatter.get("description")
+    if frontmatter_description:
+        return _clip(frontmatter_description, limit=2048)
+    return _first_markdown_paragraph(body)
+
+
+def _extract_skill_version(parsed: Any, skill_path: str | None, content: Any) -> str | None:
+    if isinstance(parsed, dict):
+        for value in (
+            parsed.get("version"),
+            parsed.get("skill_version"),
+            _payload_mapping_value(parsed, "source", "version"),
+            _payload_mapping_value(parsed, "metadata", "version"),
+            _payload_mapping_value(parsed, "frontmatter", "version"),
+        ):
+            if isinstance(value, str) and value.strip():
+                return _clip(value, limit=256)
+    frontmatter, _ = _extract_skill_frontmatter(content)
+    frontmatter_version = frontmatter.get("version")
+    if frontmatter_version:
+        return _clip(frontmatter_version, limit=256)
+    return _nearest_package_json_version(skill_path)
+
+
+def _extract_skill_source_type(parsed: Any, skill_path: str | None) -> str | None:
+    explicit = None
+    if isinstance(parsed, dict):
+        explicit = (
+            parsed.get("source_type")
+            or parsed.get("source.type")
+            or _payload_mapping_value(parsed, "source", "type")
+            or _payload_mapping_value(parsed, "metadata", "source_type")
+        )
+    normalized = _normalize_skill_source_type(explicit)
+    if normalized:
+        return normalized
+    return _infer_skill_source_type(skill_path)
+
+
+def _skill_trace_attrs(
+    tool_name: str,
+    args: dict[str, Any],
+    parsed: Any,
+    tool_call_id: str | None,
+    outcome: str | None,
+) -> dict[str, Any]:
+    if str(tool_name).strip().lower() != "skill_view":
+        return {}
+    content = parsed.get("content") if isinstance(parsed, dict) else None
+    skill_path = _extract_skill_path(parsed)
+    skill_name = _extract_skill_name_from_payload(args, parsed)
+    skill_description = _extract_skill_description(parsed, content)
+    skill_source_type = _extract_skill_source_type(parsed, skill_path)
+    skill_version = _extract_skill_version(parsed, skill_path, content)
+    result_status = None
+    if outcome is not None:
+        result_status = "error" if outcome == "error" else "completed"
+    attrs = {
+        "skill_name": skill_name,
+        "skill_description": skill_description,
+        "skill.name": skill_name,
+        "skill.description": skill_description,
+        "skill.path": skill_path,
+        "skill_call_id": _clip(tool_call_id, limit=256),
+        "skill.source.type": skill_source_type,
+        "skill.result_status": result_status,
+        "gen_ai.skill.name": skill_name,
+        "gen_ai.skill.description": skill_description,
+        "gen_ai.skill.path": skill_path,
+        "gen_ai.skill.source.type": skill_source_type,
+        "gen_ai.skill.result_status": result_status,
+        "gen_ai.skill.version": skill_version,
+    }
+    return {key: value for key, value in attrs.items() if value is not None}
 
 
 def _resolve_tool_outcome(tool_name: str, parsed: Any) -> str:
@@ -1323,9 +1554,10 @@ class TraceManager:
         if key is None:
             return
         started_at_ns = _wall_ns()
+        parent_span = turn.pending_llm.span if turn.pending_llm is not None else turn.agent_span
         span = self._runtime.start_span(
             f"tool:{tool_name}",
-            parent_span=turn.agent_span,
+            parent_span=parent_span,
             start_time_ns=started_at_ns,
         )
         attrs = {
@@ -1344,7 +1576,7 @@ class TraceManager:
             "tool_args_preview": args_preview,
             "tool_target": _extract_tool_target(tool_name, args),
             "tool_command": _extract_tool_command(tool_name, args),
-            "skill_name": _extract_tool_skill_name(tool_name, args, None),
+            **_skill_trace_attrs(tool_name, args, None, tool_call_id, None),
         }
         self._runtime.set_span_attributes(span, attrs)
         turn.active_tools[key] = ActiveSpanState(
@@ -1405,6 +1637,15 @@ class TraceManager:
         outcome = _resolve_tool_outcome(tool_name, parsed)
         result_status = _extract_tool_result_status(parsed)
         skill_name = _extract_tool_skill_name(tool_name, args, parsed)
+        self._emit_skill_span(
+            turn=turn,
+            tool_name=tool_name,
+            parsed=parsed,
+            outcome=outcome,
+            loaded_at_ns=_wall_ns(),
+            source_span=active.span,
+            source_attrs=active.attrs,
+        )
         self._runtime.set_span_attributes(
             active.span,
             {
@@ -1413,7 +1654,13 @@ class TraceManager:
                 "tool_result_status": result_status,
                 "tool_result_preview": _json_preview(parsed),
                 "gen_ai.tool.call.result": _json_attr(parsed),
-                "skill_name": skill_name,
+                **_skill_trace_attrs(
+                    tool_name,
+                    args,
+                    parsed,
+                    str(active.attrs.get("tool_call_id") or tool_call_id or "").strip() or None,
+                    outcome,
+                ),
                 "error.type": outcome if outcome == "error" else None,
             },
         )
@@ -1452,14 +1699,6 @@ class TraceManager:
             turn.tool_context_since_last_llm.append(tool_context)
             if len(turn.tool_context_since_last_llm) > 6:
                 turn.tool_context_since_last_llm = turn.tool_context_since_last_llm[-6:]
-        self._emit_skill_span(
-            turn=turn,
-            tool_name=tool_name,
-            parsed=parsed,
-            outcome=outcome,
-            loaded_at_ns=_wall_ns(),
-            source_attrs=active.attrs,
-        )
 
     def _emit_skill_span(
         self,
@@ -1468,11 +1707,13 @@ class TraceManager:
         parsed: Any,
         outcome: str,
         loaded_at_ns: int,
+        source_span: Any,
         source_attrs: dict[str, Any],
     ) -> None:
         if tool_name != "skill_view" or outcome != "completed" or not isinstance(parsed, dict):
             return
-        skill_name = str(parsed.get("name") or "").strip()
+        skill_attrs = _skill_trace_attrs(tool_name, {}, parsed, source_attrs.get("tool_call_id"), outcome)
+        skill_name = str(skill_attrs.get("skill_name") or "").strip()
         if not skill_name:
             return
         previous = turn.active_skills.pop(skill_name, None)
@@ -1481,17 +1722,15 @@ class TraceManager:
             self._metrics.record_skill_operation(
                 session_id=turn.session_id,
                 skill_name=str(previous.attrs.get("skill_name") or skill_name),
-                skill_source=str(previous.attrs.get("skill_source") or "runtime"),
                 duration_ms=max(0.0, (_mono_ns() - previous.started_monotonic_ns) / 1_000_000.0),
                 outcome="completed",
             )
         span = self._runtime.start_span(
             f"skill:{skill_name}",
-            parent_span=turn.agent_span,
+            parent_span=source_span,
             start_time_ns=loaded_at_ns,
         )
         content = parsed.get("content")
-        description = parsed.get("description")
         tags = parsed.get("tags")
         related_skills = parsed.get("related_skills")
         self._runtime.set_span_attributes(
@@ -1502,12 +1741,9 @@ class TraceManager:
                 "span_kind": _resolve_span_kind(f"skill:{skill_name}"),
                 "session_id": turn.session_id,
                 "platform": turn.platform,
-                "skill_name": skill_name,
                 **_gen_ai_common_attrs(turn.session_id),
-                "skill_source": "runtime",
-                "skill_description": _clip(description),
+                **skill_attrs,
                 "skill_content_length": len(content) if isinstance(content, str) else None,
-                "skill_source_tool_call_id": source_attrs.get("tool_call_id"),
                 "skill_related_skills": (
                     ",".join(str(item).strip() for item in related_skills if str(item).strip())
                     if isinstance(related_skills, list)
@@ -1525,12 +1761,11 @@ class TraceManager:
             span=span,
             started_at_ns=loaded_at_ns,
             started_monotonic_ns=_mono_ns(),
-            attrs={"skill_name": skill_name, "skill_source": "runtime"},
+            attrs={"skill_name": skill_name},
         )
         self._metrics.record_skill_activation(
             session_id=turn.session_id,
             skill_name=skill_name,
-            skill_source="runtime",
         )
 
     def _close_active_skills(self, turn: TurnState, end_time_ns: int, reason: str) -> None:
@@ -1551,7 +1786,6 @@ class TraceManager:
             self._metrics.record_skill_operation(
                 session_id=turn.session_id,
                 skill_name=str(active.attrs.get("skill_name") or active.key),
-                skill_source=str(active.attrs.get("skill_source") or "runtime"),
                 duration_ms=max(0.0, (_mono_ns() - active.started_monotonic_ns) / 1_000_000.0),
                 outcome=_normalize_skill_metric_outcome(reason),
             )

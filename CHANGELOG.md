@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5
+
+- Unified skill trace tags on both `tool:skill_view` and `skill:*`, including `skill.*` and `gen_ai.skill.*`.
+- Fixed the span hierarchy so skill spans attach under the triggering tool span, producing `llm -> tool -> skill`.
+- Renamed `skill_source_tool_call_id` to `skill_call_id` and removed obsolete `skill_source` trace and metric fields.
+- Updated Chinese and English trace, metric, and semantic mapping documentation for the new skill field model.
+
 ## 0.1.4
 
 - Added OpenTelemetry GenAI semantic attributes for model input/output messages, request parameters, response metadata, system instructions, tool definitions, and tool call arguments/results.

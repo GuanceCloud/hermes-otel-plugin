@@ -79,6 +79,22 @@
 - `tool_result_status`
 - `tool_phase`
 - `tool_outcome`
-- `skill_name`
-- `skill_source`
+- `skill.name`
+- `skill.description`
+- `skill.path`
+- `skill.source.type`
+- `skill.result_status`
+- `skill_call_id`
+- `gen_ai.skill.name`
+- `gen_ai.skill.description`
+- `gen_ai.skill.path`
+- `gen_ai.skill.source.type`
+- `gen_ai.skill.result_status`
+- `gen_ai.skill.version`
 - `subagent_role`
+
+说明：
+
+- `skill.*` 是当前插件对 skill 语义的兼容主字段。
+- `gen_ai.skill.*` 是项目扩展字段，便于向社区提案方向对齐，但它们暂时不是 OpenTelemetry GenAI 正式标准字段。
+- `skill_name`、`skill_description` 仍会继续保留，作为向后兼容字段输出。

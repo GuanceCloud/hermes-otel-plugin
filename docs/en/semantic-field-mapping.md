@@ -79,6 +79,22 @@ The following fields currently have no stable GenAI standard replacement and rem
 - `tool_result_status`
 - `tool_phase`
 - `tool_outcome`
-- `skill_name`
-- `skill_source`
+- `skill.name`
+- `skill.description`
+- `skill.path`
+- `skill.source.type`
+- `skill.result_status`
+- `skill_call_id`
+- `gen_ai.skill.name`
+- `gen_ai.skill.description`
+- `gen_ai.skill.path`
+- `gen_ai.skill.source.type`
+- `gen_ai.skill.result_status`
+- `gen_ai.skill.version`
 - `subagent_role`
+
+Notes:
+
+- `skill.*` is the current compatibility-facing skill field family emitted by the plugin.
+- `gen_ai.skill.*` is a project extension set that aligns with the direction of community proposals, but it is not an official OpenTelemetry GenAI standard field set yet.
+- `skill_name` and `skill_description` remain available as backward-compatible fields.

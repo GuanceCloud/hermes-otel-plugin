@@ -371,7 +371,7 @@ class MetricManager:
         self._operation_count.add(1, operation_attrs)
         self._operation_duration.record(max(0.0, duration_ms), operation_attrs)
 
-    def record_skill_activation(self, session_id: str, skill_name: str, skill_source: str = "runtime") -> None:
+    def record_skill_activation(self, session_id: str, skill_name: str) -> None:
         if not self._ensure_instruments():
             return
         self._skill_activation_count.add(
@@ -381,7 +381,6 @@ class MetricManager:
                 agent_version=AGENT_VERSION,
                 session_id=session_id,
                 skill_name=skill_name,
-                skill_source=skill_source,
             ),
         )
 
@@ -391,7 +390,6 @@ class MetricManager:
         skill_name: str,
         duration_ms: float,
         outcome: str,
-        skill_source: str = "runtime",
     ) -> None:
         if not self._ensure_instruments():
             return
@@ -401,7 +399,6 @@ class MetricManager:
             session_id=session_id,
             operation_name="skill",
             skill_name=skill_name,
-            skill_source=skill_source,
             outcome=outcome,
         )
         self._operation_count.add(1, attrs)

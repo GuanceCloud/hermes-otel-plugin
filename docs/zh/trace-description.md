@@ -460,14 +460,32 @@
 
 ## Skill 相关字段
 
-| 字段 | 描述 |
-| --- | --- |
-| `skill_name` | skill 名称 |
-| `skill_description` | skill 描述 |
-| `skill_tags` | skill tags |
-| `skill_related_skills` | 关联 skill |
-| `skill_content_length` | skill 内容长度 |
-| `skill_source_tool_call_id` | 触发该 skill span 的 `skill_view` tool call id |
+截至 2026-06-25，`skill` 仍没有 OpenTelemetry GenAI 已正式落地的一等字段。本插件保留 `skill.*` 兼容字段，同时补充 `gen_ai.skill.*` 项目扩展字段；其中 `gen_ai.skill.name`、`gen_ai.skill.description`、`gen_ai.skill.version` 与社区提案方向保持一致，但当前仍不是正式标准字段。
+
+| 字段 | 含义 | 常见 span |
+| --- | --- | --- |
+| `skill.name` | skill 名称，优先取 `SKILL.md` 所在目录名 | `skill:*`、`tool:*` |
+| `skill.description` | skill 描述，优先读 `SKILL.md` frontmatter 的 `description`，否则回退正文首个说明段落 | `skill:*`、`tool:*` |
+| `skill.path` | skill 入口文件绝对路径，当前识别为 `.../SKILL.md` | `skill:*`、`tool:*` |
+| `skill_call_id` | 对应的 `skill_view` tool call id，用于关联触发它的工具调用 | `skill:*`、`tool:*` |
+| `skill.source.type` | skill 来源类型，当前归一为 `system`、`user`、`workspace` | `skill:*`、`tool:*` |
+| `skill.result_status` | skill 加载结果，按 `skill_view` tool 是否报错映射为 `completed` 或 `error` | `skill:*`、`tool:*` |
+| `gen_ai.skill.name` | `skill.name` 的 `gen_ai.*` 扩展字段 | `skill:*`、`tool:*` |
+| `gen_ai.skill.path` | `skill.path` 的 `gen_ai.*` 扩展字段 | `skill:*`、`tool:*` |
+| `gen_ai.skill.source.type` | `skill.source.type` 的 `gen_ai.*` 扩展字段 | `skill:*`、`tool:*` |
+| `gen_ai.skill.result_status` | `skill.result_status` 的 `gen_ai.*` 扩展字段 | `skill:*`、`tool:*` |
+| `gen_ai.skill.description` | `skill.description` 的 `gen_ai.*` 扩展字段 | `skill:*`、`tool:*` |
+| `gen_ai.skill.version` | skill 版本，优先读 `SKILL.md` frontmatter 的 `version`，其次回退项目目录 `package.json.version`；没有明确元数据时不生成 | `skill:*`、`tool:*` |
+
+补充字段：
+
+| 字段 | 描述 | 常见 span |
+| --- | --- | --- |
+| `skill_name` | `skill.name` 的兼容字段 | `skill:*`、`tool:*` |
+| `skill_description` | `skill.description` 的兼容字段 | `skill:*`、`tool:*` |
+| `skill_tags` | skill tags | `skill:*` |
+| `skill_related_skills` | 关联 skill | `skill:*` |
+| `skill_content_length` | skill 内容长度 | `skill:*` |
 
 ## Subagent 相关字段
 

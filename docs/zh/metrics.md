@@ -42,7 +42,6 @@
 - `tool_name`
 - `tool_result_status`
 - `skill_name`
-- `skill_source`
 - `model_name`
 - `subagent_role`
 - `outcome`
@@ -70,7 +69,6 @@
 | `tool_name` | 工具名称 |
 | `tool_result_status` | 从 tool 返回体中提取的显式状态 |
 | `skill_name` | skill 名称 |
-| `skill_source` | skill 来源，当前为 `runtime` |
 | `model_name` | tool operation metrics 用到的模型归因 tag |
 | `subagent_role` | 子代理角色 |
 | `outcome` | 归一化结果，例如 `completed`、`error`、`failed`、`interrupted` |
@@ -96,14 +94,14 @@ Hermes 会为模型调用输出 OpenTelemetry GenAI client 指标，同时保留
 | `gen_ai.agent.request.count` | Counter | - | `agent_runtime`, `session_id`, `platform`, `provider_name`, `request_model`, `response_model`, `session_state`, `outcome`, `request_type`, `review_category` | 已完成 Hermes 请求计数 |
 | `gen_ai.agent.request.duration` | Histogram | `ms` | `agent_runtime`, `session_id`, `platform`, `provider_name`, `request_model`, `response_model`, `session_state`, `outcome`, `request_type`, `review_category` | 一次 Hermes 请求总耗时 |
 | `gen_ai.agent.token.usage` | Histogram | `{token}` | `agent_runtime`, `session_id`, `platform`, `provider_name`, `request_model`, `response_model`, `token_type` | 单次模型调用 token 用量 |
-| `gen_ai.agent.operation.count` | Counter | - | Base: `agent_runtime`, `session_id`, `outcome`, `operation_name`<br>`operation_name=model`: `platform`, `provider_name`, `request_model`, `response_model`<br>`operation_name=tool`: `platform`, `tool_name`, `skill_name`, `model_name`, `tool_result_status`<br>`operation_name=skill`: `skill_name`, `skill_source`<br>`operation_name=subagent`: `subagent_role` | model、tool、skill、subagent 维度的操作计数 |
-| `gen_ai.agent.operation.duration` | Histogram | `ms` | Base: `agent_runtime`, `session_id`, `outcome`, `operation_name`<br>`operation_name=model`: `platform`, `provider_name`, `request_model`, `response_model`<br>`operation_name=tool`: `platform`, `tool_name`, `skill_name`, `model_name`, `tool_result_status`<br>`operation_name=skill`: `skill_name`, `skill_source`<br>`operation_name=subagent`: `subagent_role` | model、tool、skill、subagent 维度的操作耗时 |
+| `gen_ai.agent.operation.count` | Counter | - | Base: `agent_runtime`, `session_id`, `outcome`, `operation_name`<br>`operation_name=model`: `platform`, `provider_name`, `request_model`, `response_model`<br>`operation_name=tool`: `platform`, `tool_name`, `skill_name`, `model_name`, `tool_result_status`<br>`operation_name=skill`: `skill_name`<br>`operation_name=subagent`: `subagent_role` | model、tool、skill、subagent 维度的操作计数 |
+| `gen_ai.agent.operation.duration` | Histogram | `ms` | Base: `agent_runtime`, `session_id`, `outcome`, `operation_name`<br>`operation_name=model`: `platform`, `provider_name`, `request_model`, `response_model`<br>`operation_name=tool`: `platform`, `tool_name`, `skill_name`, `model_name`, `tool_result_status`<br>`operation_name=skill`: `skill_name`<br>`operation_name=subagent`: `subagent_role` | model、tool、skill、subagent 维度的操作耗时 |
 | `gen_ai.agent.session.token.input` | Counter | `{token}` | `agent_runtime`, `session_id`, `provider_name`, `request_model` | 请求结束时一次性写入的聚合 input tokens |
 | `gen_ai.agent.session.token.output` | Counter | `{token}` | `agent_runtime`, `session_id`, `provider_name`, `request_model` | 请求结束时一次性写入的聚合 output tokens |
 | `gen_ai.agent.session.token.total` | Counter | `{token}` | `agent_runtime`, `session_id`, `provider_name`, `request_model` | 请求结束时一次性写入的聚合 total tokens |
 | `gen_ai.agent.session.token.usage` | Counter | `{token}` | `agent_runtime`, `session_id`, `provider_name`, `request_model`, `token_type` | 按 token type 聚合的 session token 计数器 |
 | `gen_ai.agent.session.trace.count` | Counter | - | `agent_runtime`, `session_id`, `platform`, `request_model`, `request_type` | 插件启动的 trace 数 |
-| `gen_ai.agent.skill.activation.count` | Counter | - | `agent_runtime`, `session_id`, `skill_name`, `skill_source` | 成功激活的 skill 次数 |
+| `gen_ai.agent.skill.activation.count` | Counter | - | `agent_runtime`, `session_id`, `skill_name` | 成功激活的 skill 次数 |
 | `gen_ai.agent.subagent.count` | Counter | - | `agent_runtime`, `session_id`, `subagent_role`, `outcome`, `operation_name` | 观察到的子代理完成次数 |
 | `gen_ai.agent.subagent.duration` | Histogram | `ms` | `agent_runtime`, `session_id`, `subagent_role`, `outcome`, `operation_name` | 观察到的子代理执行耗时 |
 
