@@ -106,7 +106,7 @@ The installer will:
 - install runtime Python dependencies into the Hermes runtime python
 - enable the plugin in `~/.hermes/config.yaml`
 - write the `hermes_otel_plugin` config section
-- try `hermes gateway restart` as a best-effort final step
+- try `sudo systemctl restart hermes-gateway.service` first, then fall back to `hermes gateway restart`
 
 Useful flags:
 

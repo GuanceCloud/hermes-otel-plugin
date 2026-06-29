@@ -106,7 +106,7 @@ bash output/install.sh output/hermes-otel-plugin.tar.gz \
 - 把运行时依赖安装到 Hermes 自己的 Python 环境
 - 在 `~/.hermes/config.yaml` 里启用插件
 - 写入 `hermes_otel_plugin` 配置段
-- 最后 best-effort 执行一次 `hermes gateway restart`
+- 最后优先尝试 `sudo systemctl restart hermes-gateway.service`，失败后再回退到 `hermes gateway restart`
 
 常用参数：
 

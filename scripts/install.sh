@@ -501,21 +501,30 @@ PY
 }
 
 restart_gateway_best_effort() {
+  if command -v sudo >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1; then
+    log "restarting Hermes gateway with systemd"
+    if sudo systemctl restart hermes-gateway.service >/dev/null; then
+      log "restarted Hermes gateway via systemd"
+      return
+    fi
+    log "systemd restart failed; falling back to hermes gateway restart"
+  fi
+
   if ! command -v hermes >/dev/null 2>&1; then
-    log "hermes command was not found, skipping gateway restart"
+    log "hermes command was not found; restart manually with: sudo systemctl restart hermes-gateway.service"
     return
   fi
 
-  log "restarting Hermes gateway"
+  log "restarting Hermes gateway with hermes CLI"
   if command -v timeout >/dev/null 2>&1; then
     if timeout 10s hermes gateway restart >/dev/null 2>&1; then
       log "restarted Hermes gateway"
     else
       local status="$?"
       if [ "$status" -eq 124 ]; then
-        log "gateway restart timed out after 10s; restart manually with: hermes gateway restart"
+        log "gateway restart timed out after 10s; restart manually with: sudo systemctl restart hermes-gateway.service"
       else
-        log "gateway restart failed or requires higher privileges; restart manually with: hermes gateway restart"
+        log "gateway restart failed or requires higher privileges; restart manually with: sudo systemctl restart hermes-gateway.service"
       fi
     fi
     return
@@ -525,7 +534,7 @@ restart_gateway_best_effort() {
   if hermes gateway restart >/dev/null 2>&1; then
     log "restarted Hermes gateway"
   else
-    log "gateway restart failed or requires higher privileges; restart manually with: hermes gateway restart"
+    log "gateway restart failed or requires higher privileges; restart manually with: sudo systemctl restart hermes-gateway.service"
   fi
 }
 

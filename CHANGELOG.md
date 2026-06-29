@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.7
+
+- Updated the installer restart flow to try `sudo systemctl restart hermes-gateway.service` first.
+- Kept `hermes gateway restart` as a fallback when the systemd restart path is unavailable.
+- Updated English and Chinese install docs to match the new restart recommendation.
+
 ## 0.1.6
 
 - Stopped emitting token usage tags on `hermes_request` and `invoke_agent`; token usage fields now remain on `llm` spans only.
