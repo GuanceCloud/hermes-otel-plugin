@@ -523,7 +523,8 @@ Notes:
 - Cache tokens are not merged into `usage_total_tokens`
 - Cache tokens are recorded separately in `usage_cache_*`
 - If the provider returns cumulative cache counters, the plugin normalizes them into per-`llm` deltas
-- The root span and `invoke_agent` aggregate tokens across all `llm` spans inside the request
+- The root span and `invoke_agent` do not emit token usage fields
+- `gen_ai.usage.*` is only attached to `llm` spans
 - To estimate the full prompt size, use `usage_input_tokens + usage_cache_read_input_tokens + usage_cache_write_input_tokens`
 
 ## Known Boundaries

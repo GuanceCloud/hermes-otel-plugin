@@ -85,4 +85,4 @@ jobs:
           files: |
             artifacts/dist/*
             artifacts/output/*
-          generate_release_notes: true
+          body_path: artifacts/output/release-${{ github.ref_name }}-notes.md

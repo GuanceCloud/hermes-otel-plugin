@@ -776,8 +776,8 @@ def _normalize_usage(usage: dict[str, Any] | None) -> dict[str, int]:
     }
 
 
-def _usage_attrs(usage_summary: dict[str, int]) -> dict[str, int]:
-    return {
+def _usage_attrs(usage_summary: dict[str, int], *, include_gen_ai_usage: bool = True) -> dict[str, int]:
+    attrs = {
         "usage_input_tokens": usage_summary["input_tokens"],
         "usage_output_tokens": usage_summary["output_tokens"],
         "usage_total_tokens": usage_summary["total_tokens"],
@@ -785,16 +785,22 @@ def _usage_attrs(usage_summary: dict[str, int]) -> dict[str, int]:
         "usage_cache_write_input_tokens": usage_summary["cache_write_tokens"],
         "usage_cache_total_tokens": usage_summary["cache_total_tokens"],
         "usage_reasoning_tokens": usage_summary["reasoning_tokens"],
-        "gen_ai.usage.input_tokens": usage_summary["input_tokens"],
-        "gen_ai.usage.output_tokens": usage_summary["output_tokens"],
-        "gen_ai.usage.total_tokens": usage_summary["total_tokens"],
-        "gen_ai.usage.cache_read_input_tokens": usage_summary["cache_read_tokens"],
-        "gen_ai.usage.cache_write_input_tokens": usage_summary["cache_write_tokens"],
-        "gen_ai.usage.reasoning_tokens": usage_summary["reasoning_tokens"],
-        "gen_ai.usage.cache_read.input_tokens": usage_summary["cache_read_tokens"],
-        "gen_ai.usage.cache_creation.input_tokens": usage_summary["cache_write_tokens"],
-        "gen_ai.usage.reasoning.output_tokens": usage_summary["reasoning_tokens"],
     }
+    if include_gen_ai_usage:
+        attrs.update(
+            {
+                "gen_ai.usage.input_tokens": usage_summary["input_tokens"],
+                "gen_ai.usage.output_tokens": usage_summary["output_tokens"],
+                "gen_ai.usage.total_tokens": usage_summary["total_tokens"],
+                "gen_ai.usage.cache_read_input_tokens": usage_summary["cache_read_tokens"],
+                "gen_ai.usage.cache_write_input_tokens": usage_summary["cache_write_tokens"],
+                "gen_ai.usage.reasoning_tokens": usage_summary["reasoning_tokens"],
+                "gen_ai.usage.cache_read.input_tokens": usage_summary["cache_read_tokens"],
+                "gen_ai.usage.cache_creation.input_tokens": usage_summary["cache_write_tokens"],
+                "gen_ai.usage.reasoning.output_tokens": usage_summary["reasoning_tokens"],
+            }
+        )
+    return attrs
 
 
 def _as_optional_int(value: Any) -> int | None:
@@ -1892,7 +1898,6 @@ class TraceManager:
             "gen_ai.response.model": resolved_response_model,
             "output_length": output_length if assistant_response is not None else None,
             "output_preview": output_preview,
-            **_usage_attrs(aggregate_usage),
         }
         self._runtime.set_span_attributes(turn.agent_span, final_attrs)
         self._runtime.set_span_attributes(turn.root_span, final_attrs)

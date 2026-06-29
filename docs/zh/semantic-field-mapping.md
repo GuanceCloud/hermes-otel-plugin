@@ -30,12 +30,12 @@
 | `tool_call_id` | `gen_ai.tool.call.id` | 双写 | tool call 标识 |
 | `tool_args_preview` | `gen_ai.tool.call.arguments` | 双写 | 标准字段在 span 上写成 JSON string |
 | `tool_result_preview` | `gen_ai.tool.call.result` | 双写 | 标准字段在 span 上写成 JSON string |
-| `usage_input_tokens` | `gen_ai.usage.input_tokens` | 双写 | 模型调用和请求汇总 token |
-| `usage_output_tokens` | `gen_ai.usage.output_tokens` | 双写 | 模型调用和请求汇总 token |
-| `usage_total_tokens` | `gen_ai.usage.total_tokens` | 双写 | 插件侧按 input + output 计算 |
-| `usage_cache_read_input_tokens` | `gen_ai.usage.cache_read.input_tokens` | 双写 | 新标准字段；旧 `gen_ai.usage.cache_read_input_tokens` 仍保留 |
-| `usage_cache_write_input_tokens` | `gen_ai.usage.cache_creation.input_tokens` | 双写 | 新标准字段；旧 `gen_ai.usage.cache_write_input_tokens` 仍保留 |
-| `usage_reasoning_tokens` | `gen_ai.usage.reasoning.output_tokens` | 双写 | 新标准字段；旧 `gen_ai.usage.reasoning_tokens` 仍保留 |
+| `usage_input_tokens` | `gen_ai.usage.input_tokens` | 双写 | 仅在 `llm` span 双写 |
+| `usage_output_tokens` | `gen_ai.usage.output_tokens` | 双写 | 仅在 `llm` span 双写 |
+| `usage_total_tokens` | `gen_ai.usage.total_tokens` | 双写 | 仅在 `llm` span 双写 |
+| `usage_cache_read_input_tokens` | `gen_ai.usage.cache_read.input_tokens` | 双写 | 仅在 `llm` span 双写；旧 `gen_ai.usage.cache_read_input_tokens` 仍保留 |
+| `usage_cache_write_input_tokens` | `gen_ai.usage.cache_creation.input_tokens` | 双写 | 仅在 `llm` span 双写；旧 `gen_ai.usage.cache_write_input_tokens` 仍保留 |
+| `usage_reasoning_tokens` | `gen_ai.usage.reasoning.output_tokens` | 双写 | 仅在 `llm` span 双写；旧 `gen_ai.usage.reasoning_tokens` 仍保留 |
 | `error_type` / `error_code` | `error.type` | 双写 | `error.type` 优先使用低基数 `error_code`，其次 `error_type` |
 
 ## 指标

@@ -30,12 +30,12 @@ The current strategy is transitional dual-write: the plugin emits standard `gen_
 | `tool_call_id` | `gen_ai.tool.call.id` | dual-write | Tool call identifier |
 | `tool_args_preview` | `gen_ai.tool.call.arguments` | dual-write | Standard field is written as a JSON string on spans |
 | `tool_result_preview` | `gen_ai.tool.call.result` | dual-write | Standard field is written as a JSON string on spans |
-| `usage_input_tokens` | `gen_ai.usage.input_tokens` | dual-write | Model-call and request-aggregated tokens |
-| `usage_output_tokens` | `gen_ai.usage.output_tokens` | dual-write | Model-call and request-aggregated tokens |
-| `usage_total_tokens` | `gen_ai.usage.total_tokens` | dual-write | Computed as input + output by the plugin |
-| `usage_cache_read_input_tokens` | `gen_ai.usage.cache_read.input_tokens` | dual-write | New standard field; old `gen_ai.usage.cache_read_input_tokens` is also retained |
-| `usage_cache_write_input_tokens` | `gen_ai.usage.cache_creation.input_tokens` | dual-write | New standard field; old `gen_ai.usage.cache_write_input_tokens` is also retained |
-| `usage_reasoning_tokens` | `gen_ai.usage.reasoning.output_tokens` | dual-write | New standard field; old `gen_ai.usage.reasoning_tokens` is also retained |
+| `usage_input_tokens` | `gen_ai.usage.input_tokens` | dual-write | Dual-written on `llm` spans only |
+| `usage_output_tokens` | `gen_ai.usage.output_tokens` | dual-write | Dual-written on `llm` spans only |
+| `usage_total_tokens` | `gen_ai.usage.total_tokens` | dual-write | Dual-written on `llm` spans only |
+| `usage_cache_read_input_tokens` | `gen_ai.usage.cache_read.input_tokens` | dual-write | Dual-written on `llm` spans only; old `gen_ai.usage.cache_read_input_tokens` is also retained |
+| `usage_cache_write_input_tokens` | `gen_ai.usage.cache_creation.input_tokens` | dual-write | Dual-written on `llm` spans only; old `gen_ai.usage.cache_write_input_tokens` is also retained |
+| `usage_reasoning_tokens` | `gen_ai.usage.reasoning.output_tokens` | dual-write | Dual-written on `llm` spans only; old `gen_ai.usage.reasoning_tokens` is also retained |
 | `error_type` / `error_code` | `error.type` | dual-write | `error.type` prefers low-cardinality `error_code`, then `error_type` |
 
 ## Metrics

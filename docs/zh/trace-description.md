@@ -523,7 +523,8 @@
 - cache token 不并入 `usage_total_tokens`
 - cache token 单独写入 `usage_cache_*`
 - 如果 provider 返回的是累计 cache 计数，插件会归一成单次 `llm` 调用的增量
-- 根 span 和 `invoke_agent` 会聚合整轮请求内所有 `llm` 的 token
+- 根 span 和 `invoke_agent` 不再输出 token usage 字段
+- `gen_ai.usage.*` 只挂在 `llm` span 上
 - 如果要估算完整输入，可用 `usage_input_tokens + usage_cache_read_input_tokens + usage_cache_write_input_tokens`
 
 ## 已知边界

@@ -47,6 +47,23 @@ def create_archive(archive_path: Path, source_dir: Path) -> None:
         tar.add(source_dir, arcname=source_dir.name)
 
 
+def standalone_release_notes(repo_root: Path, version: str, plugin_name: str) -> str:
+    release_doc = repo_root / "docs" / "releases" / f"v{version}.md"
+    if release_doc.is_file():
+        content = release_doc.read_text(encoding="utf-8").strip()
+        lines = content.splitlines()
+        if lines and lines[0].startswith("# "):
+            lines = lines[1:]
+            while lines and not lines[0].strip():
+                lines = lines[1:]
+        content = "\n".join(lines).strip()
+        return content + "\n"
+    return (
+        "## Summary\n\n"
+        f"`v{version}` release.\n"
+    )
+
+
 def main() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     output_dir = repo_root / "output"
@@ -59,6 +76,7 @@ def main() -> None:
     archive_path = output_dir / f"{artifact_base}.tar.gz"
     latest_archive_path = output_dir / f"{plugin_name}.tar.gz"
     installer_path = output_dir / "install.sh"
+    release_notes_path = output_dir / f"release-v{version}-notes.md"
 
     output_dir.mkdir(parents=True, exist_ok=True)
     shutil.rmtree(staging_dir, ignore_errors=True)
@@ -67,6 +85,7 @@ def main() -> None:
     Path(f"{archive_path}.sha256").unlink(missing_ok=True)
     Path(f"{latest_archive_path}.sha256").unlink(missing_ok=True)
     installer_path.unlink(missing_ok=True)
+    release_notes_path.unlink(missing_ok=True)
 
     staging_dir.mkdir(parents=True, exist_ok=True)
 
@@ -98,12 +117,14 @@ def main() -> None:
     source_installer = repo_root / "scripts" / "install.sh"
     shutil.copy2(source_installer, installer_path)
     installer_path.chmod(0o755)
+    release_notes_path.write_text(standalone_release_notes(repo_root, version, plugin_name), encoding="utf-8")
 
     log(f"artifact: {archive_path.relative_to(repo_root)}")
     log(f"checksum: {checksum_path.relative_to(repo_root)}")
     log(f"latest artifact: {latest_archive_path.relative_to(repo_root)}")
     log(f"latest checksum: {latest_checksum_path.relative_to(repo_root)}")
     log(f"installer: {installer_path.relative_to(repo_root)}")
+    log(f"release notes: {release_notes_path.relative_to(repo_root)}")
 
 
 if __name__ == "__main__":
