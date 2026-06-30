@@ -6,7 +6,7 @@
 
 This page describes the compatibility mapping from historical Hermes telemetry fields to OpenTelemetry GenAI semantic convention fields.
 
-The current strategy is transitional dual-write: the plugin emits standard `gen_ai.*` / `error.type` fields and `gen_ai.client.*` metrics while retaining existing fields, span names, and metrics so existing queries, monitors, and dashboards keep working.
+The current strategy keeps span fields backward-compatible while moving metrics to the standard GenAI metric set. The plugin emits standard `gen_ai.*` / `error.type` fields on spans, but legacy `gen_ai.agent.*` and `gen_ai.runtime.*` metrics have been removed.
 
 ## Span Fields
 
@@ -42,12 +42,17 @@ The current strategy is transitional dual-write: the plugin emits standard `gen_
 
 | current metric | new standard metric | handling | notes |
 | --- | --- | --- | --- |
-| `gen_ai.agent.token.usage` | `gen_ai.client.token.usage` | dual-write | Standard metric writes only `gen_ai.token.type=input|output` |
-| `gen_ai.agent.operation.duration` with `operation_name=model` | `gen_ai.client.operation.duration` | dual-write | Standard metric unit is seconds; legacy metric remains milliseconds |
-| `gen_ai.agent.operation.count` with `operation_name=model` | no new standard counter | retained | Legacy model-call count remains available |
-| `gen_ai.agent.request.*` | no direct standard replacement | retained | Represents Hermes turn/request lifecycle, not one model client call |
-| `gen_ai.agent.session.token.*` | no direct standard replacement | retained | Represents session-level tokens written after Hermes request aggregation |
-| `gen_ai.runtime.*` | no direct standard replacement | retained | Represents runtime processes observable through Hermes hooks |
+| `gen_ai.agent.token.usage` | `gen_ai.client.token.usage` | replaced | Standard metric writes only `gen_ai.token.type=input|output`; total/cache/reasoning buckets are no longer emitted as metrics |
+| `gen_ai.agent.operation.duration` with `operation_name=model` | `gen_ai.client.operation.duration` | replaced | Standard metric unit is seconds |
+| `gen_ai.agent.operation.duration` with `operation_name=tool` | `gen_ai.client.operation.duration` | replaced | Tool operations use `gen_ai.operation.name=execute_tool` |
+| `gen_ai.agent.operation.duration` with `operation_name=skill` | `gen_ai.client.operation.duration` | replaced | Skill operations use `gen_ai.operation.name=skill` and `gen.ai.skill.name` |
+| `gen_ai.agent.request.duration` | `gen_ai.workflow.duration` | replaced | Workflow duration uses seconds and `gen_ai.operation.name=invoke_agent` |
+| `gen_ai.agent.request.count` | no replacement | removed | No request counter is emitted |
+| `gen_ai.agent.operation.count` | no replacement | removed | No operation counter is emitted |
+| `gen_ai.agent.session.token.*` | no replacement | removed | `hermes_request` / `invoke_agent` no longer emit aggregated usage metrics |
+| `gen_ai.agent.skill.activation.count` | no direct counter replacement | removed | Skill duration is represented by `gen_ai.client.operation.duration` with `gen_ai.operation.name=skill` |
+| `gen_ai.agent.subagent.*` | no replacement | removed | Subagent activity remains visible through spans |
+| `gen_ai.runtime.*` | no replacement | removed | Runtime hook counters/histograms are no longer emitted |
 
 ## Span Names
 

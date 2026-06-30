@@ -4,142 +4,99 @@
 
 ## 概览
 
-本文档描述 `hermes-otel-plugin` 当前会输出的 metrics。
+`hermes-otel-plugin` 当前输出三类与 OpenTelemetry GenAI 对齐的指标：
 
-命名模型与 `openclaw-otel-plugin` 保持相同的产品方向：
+- `gen_ai.workflow.duration`
+- `gen_ai.client.operation.duration`
+- `gen_ai.client.token.usage`
 
-- `gen_ai.client.*`
-- `gen_ai.agent.*`
-- `gen_ai.runtime.*`
-
-当前边界：
-
-- `gen_ai.client.*`
-  用于插件主动输出的 OpenTelemetry GenAI client 模型调用指标。
-  兼容过渡期内，Hermes 仍会保留旧的 `gen_ai.agent.*` 模型指标。
-- `gen_ai.agent.*`
-  用于 Hermes 的 request、旧模型 operation/token、session token、skill、subagent 指标。
-- `gen_ai.runtime.*`
-  用于当前 Hermes plugin hooks 可以稳定观察到的运行时过程指标。
-
-## 通用 Tags
-
-### 共享 Tags
-
-- `agent_runtime`
-- `session_id`
-- `platform`
-- `provider_name`
-- `gen_ai.provider.name`
-- `request_model`
-- `gen_ai.request.model`
-- `response_model`
-- `gen_ai.response.model`
-- `operation_name`
-- `gen_ai.operation.name`
-- `token_type`
-- `gen_ai.token.type`
-- `tool_name`
-- `tool_result_status`
-- `skill_name`
-- `model_name`
-- `subagent_role`
-- `outcome`
-- `session_state`
-- `request_type`
-- `review_category`
-
-### Tag 说明
-
-| tag | 含义 |
-| --- | --- |
-| `agent_runtime` | 固定为 `hermes` |
-| `session_id` | Hermes session id |
-| `platform` | 当前运行平台，例如 `cli` |
-| `provider_name` | 模型提供方 |
-| `gen_ai.provider.name` | OpenTelemetry GenAI provider name，当前镜像 `provider_name` |
-| `request_model` | 请求模型 |
-| `gen_ai.request.model` | OpenTelemetry GenAI 请求模型，镜像 `request_model` |
-| `response_model` | 响应模型 |
-| `gen_ai.response.model` | OpenTelemetry GenAI 响应模型，镜像 `response_model` |
-| `operation_name` | 操作分类，例如 `model`、`tool`、`skill`、`subagent` |
-| `gen_ai.operation.name` | OpenTelemetry GenAI 操作名称，例如 `chat`、`execute_tool`、`invoke_agent` |
-| `token_type` | token 桶，例如 `input`、`output`、`total` |
-| `gen_ai.token.type` | OpenTelemetry GenAI client token 桶，当前为 `input` 或 `output` |
-| `tool_name` | 工具名称 |
-| `tool_result_status` | 从 tool 返回体中提取的显式状态 |
-| `skill_name` | skill 名称 |
-| `model_name` | tool operation metrics 用到的模型归因 tag |
-| `subagent_role` | 子代理角色 |
-| `outcome` | 归一化结果，例如 `completed`、`error`、`failed`、`interrupted` |
-| `session_state` | request metrics 使用的请求最终状态 |
-| `request_type` | 请求分类，例如 `user_request`、`auto_review` |
-| `review_category` | review 子类型，当前自动 review 流程主要是 `skill` |
+插件不再输出旧的 `gen_ai.agent.*` 或 `gen_ai.runtime.*` 指标。请求级、工具级、skill 级耗时由标准 workflow/client operation 指标表达，token 指标只来自模型调用 usage。
 
 ## 指标清单
 
-### GenAI Client
-
-Hermes 会为模型调用输出 OpenTelemetry GenAI client 指标，同时保留旧的 agent 指标。
-
 | metric | 类型 | 单位 | tags | 描述 |
 | --- | --- | --- | --- | --- |
-| `gen_ai.client.operation.duration` | Histogram | `s` | `agent_runtime`, `agent_version`, `session_id`, `platform`, `provider_name`, `request_model`, `response_model`, `outcome`, `gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.conversation.id`, `error.type`, `server.address`, `server.port` | 使用 OpenTelemetry GenAI client 语义记录模型调用耗时 |
-| `gen_ai.client.token.usage` | Histogram | `{token}` | `agent_runtime`, `agent_version`, `session_id`, `platform`, `provider_name`, `request_model`, `response_model`, `token_type`, `gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.conversation.id`, `gen_ai.token.type` | 使用 OpenTelemetry GenAI client 语义记录模型调用 input/output token |
+| `gen_ai.workflow.duration` | Histogram | `s` | `session_id`, `gen_ai.conversation.id`, `gen_ai.operation.name` | Hermes agent workflow 耗时。`gen_ai.operation.name` 固定为 `invoke_agent`。 |
+| `gen_ai.client.operation.duration` | Histogram | `s` | 通用 tags 加操作特有 tags | 模型调用、工具调用和 skill 调用的 client operation 耗时。 |
+| `gen_ai.client.token.usage` | Histogram | `{token}` | 通用 tags 加 `gen_ai.token.type` | 模型调用 token 用量，只输出 `input` 和 `output`。 |
 
-### GenAI Agent
+## 通用 Tags
 
-| metric | 类型 | 单位 | tags | 描述 |
-| --- | --- | --- | --- | --- |
-| `gen_ai.agent.request.count` | Counter | - | `agent_runtime`, `session_id`, `platform`, `provider_name`, `request_model`, `response_model`, `session_state`, `outcome`, `request_type`, `review_category` | 已完成 Hermes 请求计数 |
-| `gen_ai.agent.request.duration` | Histogram | `ms` | `agent_runtime`, `session_id`, `platform`, `provider_name`, `request_model`, `response_model`, `session_state`, `outcome`, `request_type`, `review_category` | 一次 Hermes 请求总耗时 |
-| `gen_ai.agent.token.usage` | Histogram | `{token}` | `agent_runtime`, `session_id`, `platform`, `provider_name`, `request_model`, `response_model`, `token_type` | 单次模型调用 token 用量 |
-| `gen_ai.agent.operation.count` | Counter | - | Base: `agent_runtime`, `session_id`, `outcome`, `operation_name`<br>`operation_name=model`: `platform`, `provider_name`, `request_model`, `response_model`<br>`operation_name=tool`: `platform`, `tool_name`, `skill_name`, `model_name`, `tool_result_status`<br>`operation_name=skill`: `skill_name`<br>`operation_name=subagent`: `subagent_role` | model、tool、skill、subagent 维度的操作计数 |
-| `gen_ai.agent.operation.duration` | Histogram | `ms` | Base: `agent_runtime`, `session_id`, `outcome`, `operation_name`<br>`operation_name=model`: `platform`, `provider_name`, `request_model`, `response_model`<br>`operation_name=tool`: `platform`, `tool_name`, `skill_name`, `model_name`, `tool_result_status`<br>`operation_name=skill`: `skill_name`<br>`operation_name=subagent`: `subagent_role` | model、tool、skill、subagent 维度的操作耗时 |
-| `gen_ai.agent.session.token.input` | Counter | `{token}` | `agent_runtime`, `session_id`, `provider_name`, `request_model` | 请求结束时一次性写入的聚合 input tokens |
-| `gen_ai.agent.session.token.output` | Counter | `{token}` | `agent_runtime`, `session_id`, `provider_name`, `request_model` | 请求结束时一次性写入的聚合 output tokens |
-| `gen_ai.agent.session.token.total` | Counter | `{token}` | `agent_runtime`, `session_id`, `provider_name`, `request_model` | 请求结束时一次性写入的聚合 total tokens |
-| `gen_ai.agent.session.token.usage` | Counter | `{token}` | `agent_runtime`, `session_id`, `provider_name`, `request_model`, `token_type` | 按 token type 聚合的 session token 计数器 |
-| `gen_ai.agent.session.trace.count` | Counter | - | `agent_runtime`, `session_id`, `platform`, `request_model`, `request_type` | 插件启动的 trace 数 |
-| `gen_ai.agent.skill.activation.count` | Counter | - | `agent_runtime`, `session_id`, `skill_name` | 成功激活的 skill 次数 |
-| `gen_ai.agent.subagent.count` | Counter | - | `agent_runtime`, `session_id`, `subagent_role`, `outcome`, `operation_name` | 观察到的子代理完成次数 |
-| `gen_ai.agent.subagent.duration` | Histogram | `ms` | `agent_runtime`, `session_id`, `subagent_role`, `outcome`, `operation_name` | 观察到的子代理执行耗时 |
+| tag | 适用范围 | 说明 |
+| --- | --- | --- |
+| `session_id` | 全部指标 | Hermes session id。 |
+| `gen_ai.conversation.id` | 全部指标 | 镜像 `session_id`，用于 OpenTelemetry GenAI 关联。 |
+| `gen_ai.operation.name` | 全部指标 | `invoke_agent`、`chat`、`execute_tool` 或 `skill`。 |
+| `gen_ai.provider.name` | 模型 operation 和 token 指标 | 模型提供方。 |
+| `gen_ai.request.model` | 模型 operation 和 token 指标 | 请求模型。 |
+| `gen_ai.response.model` | 模型 operation 和 token 指标 | 响应模型。 |
+| `server.address` | 模型 operation 和 token 指标 | 可观测到 provider endpoint 时写入 host。 |
+| `server.port` | 模型 operation 和 token 指标 | 可观测到 provider endpoint 时写入 port。 |
+| `error.type` | 模型 operation 指标 | 模型调用失败时写入低基数错误类型。 |
+| `gen_ai.tool.name` | 工具 operation 指标 | 工具名称。 |
+| `tool_result_status` | 工具 operation 指标 | 从 Hermes tool 输出中提取的结果状态。 |
+| `gen.ai.skill.name` | skill operation 指标 | skill 名称。 |
+| `gen_ai.token.type` | token 指标 | `input` 或 `output`。 |
 
-### GenAI Runtime
+`host` 和 `host.name` 应由 runtime/exporter 配置写入 OTLP resource attributes，不作为每个 metric point 的普通 tag 重复写入。
 
-| metric | 类型 | 单位 | tags | 描述 |
-| --- | --- | --- | --- | --- |
-| `gen_ai.runtime.tool.call.count` | Counter | - | `agent_runtime`, `session_id`, `platform`, `tool_name`, `skill_name`, `tool_result_status`, `outcome` | 观察到的 tool call 次数 |
-| `gen_ai.runtime.tool.call.duration` | Histogram | `ms` | `agent_runtime`, `session_id`, `platform`, `tool_name`, `skill_name`, `tool_result_status`, `outcome` | 观察到的 tool call 耗时 |
-| `gen_ai.runtime.session.start.count` | Counter | - | `agent_runtime`, `session_id`, `platform` | Hermes session start 事件计数 |
-| `gen_ai.runtime.session.end.count` | Counter | - | `agent_runtime`, `session_id`, `platform`, `outcome` | Hermes session end 事件计数 |
-| `gen_ai.runtime.session.reset.count` | Counter | - | `agent_runtime`, `session_id`, `platform` | Hermes session reset 事件计数 |
-| `gen_ai.runtime.turn.interrupted.count` | Counter | - | `agent_runtime`, `session_id`, `platform` | 被中断的 Hermes 请求计数 |
+## Operation 语义
 
-## 当前与 OpenClaw 的对齐情况
+### Workflow
 
-以下部分已经在原则上对齐：
+`invoke_agent` workflow 结束时记录 `gen_ai.workflow.duration`。
 
-- request metrics
-- operation metrics
-- tool runtime metrics
-- session trace count
-- session token aggregation
-- skill activation metric
+Workflow 指标不携带模型、usage、tool、request type 或聚合 token tags，避免在请求级指标中混入模型维度。
 
-以下部分当前 Hermes 还不会输出，因为 plugin hook 模型没有暴露所需的运行时信号：
+### 模型调用
 
-- `gen_ai.runtime.message.*`
-- `gen_ai.runtime.queue.*`
-- `gen_ai.runtime.session.stuck.*`
-- `gen_ai.runtime.webhook.*`
+模型调用记录：
 
-## 说明
+- `gen_ai.client.operation.duration`，`gen_ai.operation.name=chat`
+- `gen_ai.client.token.usage`，`gen_ai.token.type=input`
+- `gen_ai.client.token.usage`，`gen_ai.token.type=output`
 
-- `gen_ai.agent.token.usage` 记录单次模型调用的 token 用量。
-- `gen_ai.client.token.usage` 使用标准 GenAI 属性记录同一批模型调用 token，并且只写入 `input` / `output` token 桶。
-- `gen_ai.agent.session.token.*` 在请求收尾时记录整轮聚合 token。
-- `tool_result_status` 与归一化后的 `outcome` 保持分离。
-- `request_type=user_request` 是默认分类。
-- `request_type=auto_review` 用于 Hermes 自动 review 流程，必要时还会带 `review_category=skill`。
-- 旧字段到标准字段的关系见：[语义字段映射](semantic-field-mapping.md)。
+cache、total、reasoning token 在 Hermes 可观测到时仍保留在 `llm` span 的 trace attributes 上，但不再作为 metrics 输出。
+
+### 工具和 Skill 调用
+
+工具调用记录 `gen_ai.client.operation.duration`，并携带：
+
+- `gen_ai.operation.name=execute_tool`
+- `gen_ai.tool.name`
+- 可用时携带 `tool_result_status`
+
+工具指标不携带模型 tags，也不携带 token usage tags。
+
+Skill 调用作为一类特殊工具调用记录 `gen_ai.client.operation.duration`，并携带：
+
+- `gen_ai.operation.name=skill`
+- `gen.ai.skill.name`
+
+Skill 指标不携带模型 tags，也不携带 token usage tags。
+
+## 已移除旧指标
+
+| 已移除指标 | 替代方式 |
+| --- | --- |
+| `gen_ai.agent.request.count` | 移除，无 counter 替代。 |
+| `gen_ai.agent.request.duration` | `gen_ai.workflow.duration` |
+| `gen_ai.agent.operation.count` | 移除，无 counter 替代。 |
+| `gen_ai.agent.operation.duration` | `gen_ai.client.operation.duration` |
+| `gen_ai.agent.token.usage` | `gen_ai.client.token.usage` |
+| `gen_ai.agent.session.token.*` | 移除；`hermes_request` / `invoke_agent` 不再输出聚合 usage 指标。 |
+| `gen_ai.agent.skill.activation.count` | 移除；skill 耗时由 `gen_ai.operation.name=skill` 的 `gen_ai.client.operation.duration` 表达。 |
+| `gen_ai.agent.subagent.*` | 移除。 |
+| `gen_ai.runtime.*` | 移除。 |
+
+## 迁移说明
+
+- workflow 和 client operation 指标单位从毫秒改为秒。
+- `session_id` 保留，并复制到 `gen_ai.conversation.id`。
+- `provider_name` 改为 `gen_ai.provider.name`。
+- `request_model` 改为 `gen_ai.request.model`。
+- `response_model` 改为 `gen_ai.response.model`。
+- `operation_name` 改为 `gen_ai.operation.name`。
+- `tool_name` 改为 `gen_ai.tool.name`。
+- `token_type` 改为 `gen_ai.token.type`。
+- `token_type=total`、cache token bucket、reasoning token bucket 不再作为 metrics 输出。

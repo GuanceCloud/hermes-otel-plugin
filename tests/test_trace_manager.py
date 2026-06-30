@@ -328,44 +328,32 @@ class TraceManagerTests(unittest.TestCase):
         self.assertNotIn("usage_cache_write_input_tokens", tool_span.attributes)
         self.assertNotIn("usage_cache_total_tokens", tool_span.attributes)
         self.assertNotIn("usage_reasoning_tokens", tool_span.attributes)
-        tool_metric_attrs = self.manager._metrics._tool_call_count.calls[0][2]
-        self.assertEqual(tool_metric_attrs["tool_name"], "terminal")
-        self.assertEqual(tool_metric_attrs["outcome"], "completed")
-        self.assertNotIn("tool_result_status", tool_metric_attrs)
         tool_operation_call = next(
             call
-            for call in self.manager._metrics._operation_count.calls
-            if call[2].get("operation_name") == "tool"
+            for call in self.manager._metrics._client_operation_duration.calls
+            if call[2].get("gen_ai.operation.name") == "execute_tool"
         )
-        self.assertEqual(tool_operation_call[2]["model_name"], "gpt-test")
+        self.assertGreaterEqual(tool_operation_call[1], 0.0)
         self.assertEqual(tool_operation_call[2]["gen_ai.operation.name"], "execute_tool")
         self.assertEqual(tool_operation_call[2]["gen_ai.tool.name"], "terminal")
-        request_count_call = self.manager._metrics._request_count.calls[0]
-        self.assertEqual(request_count_call[2]["request_type"], "user_request")
-        self.assertEqual(request_count_call[2]["session_state"], "completed")
-        session_token_input_call = self.manager._metrics._session_token_input.calls[0]
-        session_token_total_call = self.manager._metrics._session_token_total.calls[0]
-        self.assertEqual(session_token_input_call[1], 10.0)
-        self.assertEqual(session_token_total_call[1], 13.0)
-        session_token_usage_total_call = next(
-            call
-            for call in self.manager._metrics._session_token_usage.calls
-            if call[2].get("token_type") == "total"
-        )
-        self.assertEqual(session_token_usage_total_call[1], 13.0)
-        token_usage_calls = self.manager._metrics._token_usage.calls
-        total_call = next(call for call in token_usage_calls if call[2]["token_type"] == "total")
-        self.assertEqual(total_call[1], 13.0)
-        self.assertEqual(total_call[2]["gen_ai.operation.name"], "chat")
-        self.assertEqual(total_call[2]["gen_ai.provider.name"], "openai")
+        self.assertNotIn("tool_name", tool_operation_call[2])
+        self.assertFalse(hasattr(self.manager._metrics, "_tool_call_count"))
+        workflow_call = self.manager._metrics._workflow_duration.calls[0]
+        self.assertEqual(workflow_call[2]["gen_ai.operation.name"], "invoke_agent")
+        self.assertEqual(workflow_call[2]["gen_ai.conversation.id"], "sess-1")
+        self.assertFalse(hasattr(self.manager._metrics, "_request_count"))
+        self.assertFalse(hasattr(self.manager._metrics, "_session_token_input"))
         client_token_calls = self.manager._metrics._client_token_usage.calls
         self.assertEqual({call[2]["gen_ai.token.type"] for call in client_token_calls}, {"input", "output"})
         input_client_call = next(call for call in client_token_calls if call[2]["gen_ai.token.type"] == "input")
         self.assertEqual(input_client_call[1], 10.0)
         self.assertEqual(input_client_call[2]["server.address"], "api.openai.com")
+        self.assertNotIn("token_type", input_client_call[2])
+        self.assertNotIn("provider_name", input_client_call[2])
         client_duration_call = self.manager._metrics._client_operation_duration.calls[0]
         self.assertEqual(client_duration_call[1], 0.25)
         self.assertEqual(client_duration_call[2]["gen_ai.request.model"], "gpt-test")
+        self.assertEqual(client_duration_call[2]["gen_ai.operation.name"], "chat")
 
     def test_session_metadata_fields_are_attached_to_root_and_agent_spans(self) -> None:
         self.session_metadata.items["sess-meta"] = SessionMetadata(
@@ -587,9 +575,11 @@ class TraceManagerTests(unittest.TestCase):
             self.assertEqual(span.attributes["request_type"], "auto_review")
             self.assertEqual(span.attributes["review_category"], "skill")
             self.assertEqual(span.attributes["is_auto_review"], True)
-        request_count_call = self.manager._metrics._request_count.calls[0]
-        self.assertEqual(request_count_call[2]["request_type"], "auto_review")
-        self.assertEqual(request_count_call[2]["review_category"], "skill")
+        workflow_call = self.manager._metrics._workflow_duration.calls[0]
+        self.assertEqual(workflow_call[2]["gen_ai.operation.name"], "invoke_agent")
+        self.assertEqual(workflow_call[2]["gen_ai.conversation.id"], "sess-review")
+        self.assertNotIn("request_type", workflow_call[2])
+        self.assertNotIn("review_category", workflow_call[2])
 
     def test_llm_zero_usage_and_response_model_fallback_align_with_openclaw(self) -> None:
         self.manager.start_turn(
@@ -654,9 +644,10 @@ class TraceManagerTests(unittest.TestCase):
         self.assertNotIn("gen_ai.usage.input_tokens", root_span.attributes)
         self.assertNotIn("gen_ai.usage.total_tokens", root_span.attributes)
 
-        token_usage_calls = self.manager._metrics._token_usage.calls
-        total_call = next(call for call in token_usage_calls if call[2]["token_type"] == "total")
-        self.assertEqual(total_call[1], 0.0)
+        client_token_calls = self.manager._metrics._client_token_usage.calls
+        self.assertEqual({call[2]["gen_ai.token.type"] for call in client_token_calls}, {"input", "output"})
+        self.assertEqual([call[1] for call in client_token_calls], [0.0, 0.0])
+        self.assertFalse(hasattr(self.manager._metrics, "_token_usage"))
 
     def test_llm_request_diagnostics_include_payload_and_system_prompt_metadata(self) -> None:
         class PromptDiagnostics:
@@ -1176,15 +1167,17 @@ class TraceManagerTests(unittest.TestCase):
             self.assertEqual(span.attributes["skill_call_id"], "call-skill-2")
         self.assertEqual(skill_span.attributes["skill_tags"], "query")
         self.assertEqual(skill_span.attributes["skill_related_skills"], "dashboard")
-        skill_activation_call = self.manager._metrics._skill_activation_count.calls[0]
-        self.assertEqual(skill_activation_call[2]["skill_name"], "skill_manage")
-        skill_operation_call = next(
+        self.assertFalse(hasattr(self.manager._metrics, "_skill_activation_count"))
+        skill_operation_calls = [
             call
-            for call in self.manager._metrics._operation_count.calls
-            if call[2].get("operation_name") == "skill"
-        )
-        self.assertEqual(skill_operation_call[2]["skill_name"], "skill_manage")
-        self.assertEqual(skill_operation_call[2]["outcome"], "completed")
+            for call in self.manager._metrics._client_operation_duration.calls
+            if call[2].get("gen_ai.operation.name") == "skill"
+        ]
+        self.assertEqual(len(skill_operation_calls), 1)
+        self.assertGreaterEqual(skill_operation_calls[0][1], 0.0)
+        self.assertEqual(skill_operation_calls[0][2]["gen.ai.skill.name"], "skill_manage")
+        self.assertEqual(skill_operation_calls[0][2]["gen_ai.conversation.id"], "sess-6")
+        self.assertNotIn("skill_name", skill_operation_calls[0][2])
 
     def test_failed_skill_view_marks_tool_result_status_without_emitting_skill_span(self) -> None:
         self.manager.start_turn(
@@ -1460,9 +1453,10 @@ class TraceManagerTests(unittest.TestCase):
         self.assertEqual(tool_span.attributes["tool_outcome"], "completed")
         self.assertEqual(tool_span.attributes["tool_result_status"], "completed")
         self.assertEqual(tool_span.attributes["tool_command"], "python app.py")
-        tool_metric_attrs = self.manager._metrics._tool_call_count.calls[0][2]
+        tool_metric_attrs = self.manager._metrics._client_operation_duration.calls[0][2]
         self.assertEqual(tool_metric_attrs["tool_result_status"], "completed")
-        self.assertEqual(tool_metric_attrs["outcome"], "completed")
+        self.assertEqual(tool_metric_attrs["gen_ai.operation.name"], "execute_tool")
+        self.assertNotIn("outcome", tool_metric_attrs)
 
     def test_api_request_error_marks_llm_and_parent_spans(self) -> None:
         self.manager.start_turn(
@@ -1523,14 +1517,16 @@ class TraceManagerTests(unittest.TestCase):
         self.assertEqual(agent_span.status_code, "ERROR")
         self.assertEqual(root_span.status_code, "ERROR")
 
-        request_error_call = self.manager._metrics._operation_count.calls[0]
-        self.assertEqual(request_error_call[2]["operation_name"], "model")
-        self.assertEqual(request_error_call[2]["outcome"], "error")
+        request_error_call = self.manager._metrics._client_operation_duration.calls[0]
+        self.assertEqual(request_error_call[2]["gen_ai.operation.name"], "chat")
+        self.assertNotIn("outcome", request_error_call[2])
         self.assertEqual(request_error_call[2]["error.type"], "token_invalidated")
         self.assertEqual(request_error_call[2]["gen_ai.provider.name"], "openai-codex")
         self.assertEqual(request_error_call[2]["server.address"], "chatgpt.com")
-        request_count_call = self.manager._metrics._request_count.calls[0]
-        self.assertEqual(request_count_call[2]["session_state"], "failed")
+        self.assertEqual(self.manager._metrics._client_token_usage.calls, [])
+        workflow_call = self.manager._metrics._workflow_duration.calls[0]
+        self.assertEqual(workflow_call[2]["gen_ai.operation.name"], "invoke_agent")
+        self.assertNotIn("session_state", workflow_call[2])
         self.assertEqual(self.runtime.logs[-1][1]["outcome"], "failed")
 
 

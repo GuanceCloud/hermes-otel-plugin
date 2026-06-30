@@ -6,7 +6,7 @@
 
 本页描述 `hermes-otel-plugin` 从历史 Hermes 字段到 OpenTelemetry GenAI semantic conventions 字段的兼容关系。
 
-当前策略是双写过渡：新增标准 `gen_ai.*` / `error.type` 字段和 `gen_ai.client.*` 指标，同时保留旧字段、旧 span 名称和旧指标，避免破坏已有查询、监控器和 Dashboard。
+当前策略是在 span 字段上保持向后兼容，同时将 metrics 迁移到标准 GenAI 指标体系。插件仍会在 span 上输出标准 `gen_ai.*` / `error.type` 字段，但旧的 `gen_ai.agent.*` 和 `gen_ai.runtime.*` 指标已经移除。
 
 ## Span 字段
 
@@ -42,12 +42,17 @@
 
 | 当前指标 | 新增标准指标 | 处理方式 | 说明 |
 | --- | --- | --- | --- |
-| `gen_ai.agent.token.usage` | `gen_ai.client.token.usage` | 双写 | 标准指标只写 `gen_ai.token.type=input|output` |
-| `gen_ai.agent.operation.duration` with `operation_name=model` | `gen_ai.client.operation.duration` | 双写 | 标准指标单位为秒；旧指标单位仍为毫秒 |
-| `gen_ai.agent.operation.count` with `operation_name=model` | 暂无新增标准计数器 | 保留 | 当前只保留旧模型调用计数 |
-| `gen_ai.agent.request.*` | 无直接标准替代 | 保留 | 表示 Hermes turn/request，不等同于模型 client 调用 |
-| `gen_ai.agent.session.token.*` | 无直接标准替代 | 保留 | 表示 Hermes request 汇总后写入 session 级 token |
-| `gen_ai.runtime.*` | 无直接标准替代 | 保留 | 表示 Hermes runtime hook 能观察到的过程指标 |
+| `gen_ai.agent.token.usage` | `gen_ai.client.token.usage` | 替换 | 标准指标只写 `gen_ai.token.type=input|output`；total/cache/reasoning bucket 不再作为 metrics 输出 |
+| `gen_ai.agent.operation.duration` with `operation_name=model` | `gen_ai.client.operation.duration` | 替换 | 标准指标单位为秒 |
+| `gen_ai.agent.operation.duration` with `operation_name=tool` | `gen_ai.client.operation.duration` | 替换 | 工具调用使用 `gen_ai.operation.name=execute_tool` |
+| `gen_ai.agent.operation.duration` with `operation_name=skill` | `gen_ai.client.operation.duration` | 替换 | skill 调用使用 `gen_ai.operation.name=skill` 和 `gen.ai.skill.name` |
+| `gen_ai.agent.request.duration` | `gen_ai.workflow.duration` | 替换 | workflow duration 单位为秒，`gen_ai.operation.name=invoke_agent` |
+| `gen_ai.agent.request.count` | 无替代 | 移除 | 不再输出 request counter |
+| `gen_ai.agent.operation.count` | 无替代 | 移除 | 不再输出 operation counter |
+| `gen_ai.agent.session.token.*` | 无替代 | 移除 | `hermes_request` / `invoke_agent` 不再输出聚合 usage 指标 |
+| `gen_ai.agent.skill.activation.count` | 无直接 counter 替代 | 移除 | skill 耗时由 `gen_ai.operation.name=skill` 的 `gen_ai.client.operation.duration` 表达 |
+| `gen_ai.agent.subagent.*` | 无替代 | 移除 | subagent 活动仍可通过 spans 查看 |
+| `gen_ai.runtime.*` | 无替代 | 移除 | 不再输出 runtime hook counters/histograms |
 
 ## Span 名称
 

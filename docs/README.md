@@ -11,6 +11,7 @@
   - [指标说明](zh/metrics.md)
   - [语义字段映射](zh/semantic-field-mapping.md)
 - Releases:
+  - [v0.1.8](releases/v0.1.8.md)
   - [v0.1.7](releases/v0.1.7.md)
   - [v0.1.6](releases/v0.1.6.md)
   - [v0.1.5](releases/v0.1.5.md)
