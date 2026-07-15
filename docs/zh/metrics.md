@@ -4,9 +4,10 @@
 
 ## 概览
 
-`hermes-otel-plugin` 当前输出三类与 OpenTelemetry GenAI 对齐的指标：
+`hermes-otel-plugin` 当前输出四类与 OpenTelemetry GenAI 对齐的指标：
 
 - `gen_ai.workflow.duration`
+- `gen_ai.agent.operation.count`
 - `gen_ai.client.operation.duration`
 - `gen_ai.client.token.usage`
 
@@ -17,6 +18,7 @@
 | metric | 类型 | 单位 | tags | 描述 |
 | --- | --- | --- | --- | --- |
 | `gen_ai.workflow.duration` | Histogram | `s` | `session_id`, `gen_ai.conversation.id`, `gen_ai.operation.name` | Hermes agent workflow 耗时。`gen_ai.operation.name` 固定为 `invoke_agent`。 |
+| `gen_ai.agent.operation.count` | Sum | 操作特有 tags 加 `status` | 模型调用、工具调用和 skill 调用次数。每个 data point 固定写入 `1`。 |
 | `gen_ai.client.operation.duration` | Histogram | `s` | 通用 tags 加操作特有 tags | 模型调用、工具调用和 skill 调用的 client operation 耗时。 |
 | `gen_ai.client.token.usage` | Histogram | `{token}` | 通用 tags 加 `gen_ai.token.type` | 模型调用 token 用量，只输出 `input` 和 `output`。 |
 
@@ -34,6 +36,7 @@
 | `server.port` | 模型 operation 和 token 指标 | 可观测到 provider endpoint 时写入 port。 |
 | `error.type` | 模型 operation 指标 | 模型调用失败时写入低基数错误类型。 |
 | `gen_ai.tool.name` | 工具 operation 指标 | 工具名称。 |
+| `status` | operation count 指标 | 统一结果维度。operation count 使用 `ok` 或 `error`。 |
 | `tool_result_status` | 工具 operation 指标 | 从 Hermes tool 输出中提取的结果状态。 |
 | `gen.ai.skill.name` | skill operation 指标 | skill 名称。 |
 | `gen_ai.token.type` | token 指标 | `input` 或 `output`。 |
@@ -52,6 +55,7 @@ Workflow 指标不携带模型、usage、tool、request type 或聚合 token tag
 
 模型调用记录：
 
+- `gen_ai.agent.operation.count`，`gen_ai.operation.name=chat`，并带 `status=ok|error`
 - `gen_ai.client.operation.duration`，`gen_ai.operation.name=chat`
 - `gen_ai.client.token.usage`，`gen_ai.token.type=input`
 - `gen_ai.client.token.usage`，`gen_ai.token.type=output`
@@ -62,6 +66,7 @@ cache、total、reasoning token 在 Hermes 可观测到时仍保留在 `llm` spa
 
 工具调用记录 `gen_ai.client.operation.duration`，并携带：
 
+- `gen_ai.agent.operation.count`，`gen_ai.operation.name=execute_tool`、`gen_ai.tool.name`、`status=ok|error`
 - `gen_ai.operation.name=execute_tool`
 - `gen_ai.tool.name`
 - 可用时携带 `tool_result_status`
@@ -70,6 +75,7 @@ cache、total、reasoning token 在 Hermes 可观测到时仍保留在 `llm` spa
 
 Skill 调用作为一类特殊工具调用记录 `gen_ai.client.operation.duration`，并携带：
 
+- `gen_ai.agent.operation.count`，`gen_ai.operation.name=skill`、`gen.ai.skill.name`、`status=ok|error`
 - `gen_ai.operation.name=skill`
 - `gen.ai.skill.name`
 
@@ -81,7 +87,6 @@ Skill 指标不携带模型 tags，也不携带 token usage tags。
 | --- | --- |
 | `gen_ai.agent.request.count` | 移除，无 counter 替代。 |
 | `gen_ai.agent.request.duration` | `gen_ai.workflow.duration` |
-| `gen_ai.agent.operation.count` | 移除，无 counter 替代。 |
 | `gen_ai.agent.operation.duration` | `gen_ai.client.operation.duration` |
 | `gen_ai.agent.token.usage` | `gen_ai.client.token.usage` |
 | `gen_ai.agent.session.token.*` | 移除；`hermes_request` / `invoke_agent` 不再输出聚合 usage 指标。 |
@@ -97,6 +102,7 @@ Skill 指标不携带模型 tags，也不携带 token usage tags。
 - `request_model` 改为 `gen_ai.request.model`。
 - `response_model` 改为 `gen_ai.response.model`。
 - `operation_name` 改为 `gen_ai.operation.name`。
+- `gen_ai.agent.operation.count` 保留，并统一使用 `status` 作为结果维度。
 - `tool_name` 改为 `gen_ai.tool.name`。
 - `token_type` 改为 `gen_ai.token.type`。
 - `token_type=total`、cache token bucket、reasoning token bucket 不再作为 metrics 输出。

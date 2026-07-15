@@ -207,7 +207,7 @@
   - `gen_ai.tool.call.result`
   - `tool_call_id`
   - `tool_phase`
-  - `tool_outcome`
+  - `tool_status`
   - `tool_arg_keys`
   - `tool_target`
   - `tool_command`
@@ -221,7 +221,7 @@
   - `tool_name`
   - `tool_call_id`
   - `tool_phase`
-  - `tool_outcome`
+  - `tool_status`
   - `tool_arg_keys`
   - `tool_target`
   - `tool_command`
@@ -399,7 +399,7 @@
 | `tool_name` | tool 名称 |
 | `tool_call_id` | tool call 标识 |
 | `tool_phase` | tool 当前阶段，当前为 `call` 或 `result` |
-| `tool_outcome` | 插件统一归一后的 tool 结果，当前口径为 `completed` / `error` |
+| `tool_status` | 插件统一归一后的 tool 结果，当前口径为 `completed` / `error` |
 | `tool_arg_keys` | tool 参数 key 列表 |
 | `tool_target` | tool 操作目标，例如文件路径、搜索目录、skill 名称 |
 | `tool_command` | tool 执行命令，目前主要用于 `terminal` |
@@ -420,11 +420,11 @@
 | `tool_name` | 必选 | tool 名称 |
 | `tool_call_id` | 必选 | tool call 标识；如果宿主未提供，可为空 |
 | `tool_phase` | 必选 | tool 当前阶段；当前口径为 `call` / `result` |
-| `tool_outcome` | 必选 | 插件统一归一后的结果；当前口径为 `completed` / `error` |
+| `tool_status` | 必选 | 插件统一归一后的结果；当前口径为 `completed` / `error` |
 | `tool_arg_keys` | 必选 | tool 参数 key 列表 |
 | `tool_args_preview` | 必选 | tool 参数摘要 |
 | `tool_result_preview` | 必选 | tool 结果摘要 |
-| `tool_result_status` | 必选 | tool 返回体中的显式状态，不等于 `tool_outcome` |
+| `tool_result_status` | 必选 | tool 返回体中的显式状态，不等于 `tool_status` |
 
 #### Conditional
 
@@ -453,8 +453,8 @@
 
 #### Normalization Rules
 
-- `tool_outcome` 表示插件统一归一后的执行结果，用于跨工具做统一聚合。
-- `tool_result_status` 只表示 tool 返回体里的显式状态，不应回退为 `tool_outcome`。
+- `tool_status` 表示插件统一归一后的执行结果，用于跨工具做统一聚合。
+- `tool_result_status` 只表示 tool 返回体里的显式状态，不应回退为 `tool_status`。
 - `tool_target` 和 `tool_command` 允许按 tool 类型做有限推导，但不应为了“字段齐全”写入不可靠值。
 - 对标准产品来说，优先保证字段语义稳定，其次才是字段数量完整。
 
@@ -493,7 +493,7 @@
 | --- | --- |
 | `subagent_role` | 子代理展示角色；当 Hermes 仅返回通用角色如 `leaf` 时，插件会优先回退到 `delegate_task.profile` |
 | `subagent_runtime_role` | Hermes hook 返回的原始子代理角色，例如 `leaf` |
-| `outcome` | 子代理结果 |
+| `status` | 子代理结果 |
 | `output_preview` | 子代理摘要输出 |
 | `output_length` | 子代理输出长度 |
 

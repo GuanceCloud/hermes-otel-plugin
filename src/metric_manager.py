@@ -12,6 +12,13 @@ def _attrs(**kwargs: Any) -> dict[str, Any]:
     return {key: value for key, value in kwargs.items() if value is not None}
 
 
+def _operation_metric_status(status: str | None) -> str:
+    normalized = str(status or "").strip().lower()
+    if normalized in {"error", "failed", "failure", "expired"}:
+        return "error"
+    return "ok"
+
+
 def _token_usage(usage: dict[str, Any] | None) -> dict[str, int]:
     if usage is None:
         return {}
@@ -69,6 +76,7 @@ class MetricManager:
         self._lock = threading.RLock()
         self._initialized = False
         self._workflow_duration = None
+        self._operation_count = None
         self._client_token_usage = None
         self._client_operation_duration = None
 
@@ -85,6 +93,10 @@ class MetricManager:
                 "gen_ai.workflow.duration",
                 unit="s",
                 description="Hermes agent workflow duration",
+            )
+            self._operation_count = meter.create_counter(
+                "gen_ai.agent.operation.count",
+                description="Hermes agent operation count",
             )
             self._client_token_usage = meter.create_histogram(
                 "gen_ai.client.token.usage",
@@ -107,7 +119,7 @@ class MetricManager:
         session_id: str,
         platform: str,
         model: str,
-        outcome: str,
+        status: str,
         duration_ms: float,
         provider_name: str | None = None,
         response_model: str | None = None,
@@ -134,7 +146,7 @@ class MetricManager:
         request_model: str,
         provider_name: str,
         duration_ms: float,
-        outcome: str,
+        status: str,
         response_model: str | None = None,
         usage: dict[str, Any] | None = None,
         error_type: str | None = None,
@@ -151,6 +163,13 @@ class MetricManager:
             base_url=base_url,
         )
         attrs = _attrs(session_id=session_id, **standard_attrs)
+        self._operation_count.add(
+            1,
+            _attrs(
+                **standard_attrs,
+                status=_operation_metric_status(status),
+            ),
+        )
         self._client_operation_duration.record(max(0.0, duration_ms) / 1000.0, attrs)
 
         numeric_usage = _token_usage(usage)
@@ -171,7 +190,7 @@ class MetricManager:
         platform: str,
         tool_name: str,
         duration_ms: float,
-        outcome: str,
+        status: str,
         result_status: str | None = None,
         skill_name: str | None = None,
         model_name: str | None = None,
@@ -187,6 +206,16 @@ class MetricManager:
             },
             tool_result_status=result_status,
         )
+        self._operation_count.add(
+            1,
+            _attrs(
+                **{
+                    "gen_ai.operation.name": "execute_tool",
+                    "gen_ai.tool.name": tool_name,
+                    "status": _operation_metric_status(status),
+                }
+            ),
+        )
         self._client_operation_duration.record(max(0.0, duration_ms) / 1000.0, attrs)
 
     def record_skill_activation(self, session_id: str, skill_name: str) -> None:
@@ -197,7 +226,7 @@ class MetricManager:
         session_id: str,
         skill_name: str,
         duration_ms: float,
-        outcome: str,
+        status: str,
     ) -> None:
         if not self._ensure_instruments():
             return
@@ -209,6 +238,16 @@ class MetricManager:
                 "gen.ai.skill.name": skill_name,
             },
         )
+        self._operation_count.add(
+            1,
+            _attrs(
+                **{
+                    "gen_ai.operation.name": "skill",
+                    "gen.ai.skill.name": skill_name,
+                    "status": _operation_metric_status(status),
+                }
+            ),
+        )
         self._client_operation_duration.record(max(0.0, duration_ms) / 1000.0, attrs)
 
     def record_subagent(
@@ -216,14 +255,14 @@ class MetricManager:
         session_id: str,
         child_role: str,
         duration_ms: float,
-        outcome: str,
+        status: str,
     ) -> None:
         return
 
     def record_session_start(self, session_id: str, platform: str) -> None:
         return
 
-    def record_session_end(self, session_id: str, platform: str, outcome: str) -> None:
+    def record_session_end(self, session_id: str, platform: str, status: str) -> None:
         return
 
     def record_session_reset(self, session_id: str, platform: str) -> None:

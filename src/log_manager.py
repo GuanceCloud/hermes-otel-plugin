@@ -30,7 +30,7 @@ class LogManager:
             payload.update({key: value for key, value in attrs.items() if value is not None})
         self._runtime.emit_log(body, payload, severity_text=severity)
 
-    def emit_session_event(self, body: str, session_id: str, platform: str, outcome: str | None = None) -> None:
+    def emit_session_event(self, body: str, session_id: str, platform: str, status: str | None = None) -> None:
         self.emit(
             "session",
             body,
@@ -39,7 +39,7 @@ class LogManager:
                 "agent_version": AGENT_VERSION,
                 "session_id": session_id,
                 "platform": platform,
-                "outcome": outcome,
+                "status": status,
             },
         )
 

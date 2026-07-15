@@ -48,7 +48,7 @@ The current strategy keeps span fields backward-compatible while moving metrics 
 | `gen_ai.agent.operation.duration` with `operation_name=skill` | `gen_ai.client.operation.duration` | replaced | Skill operations use `gen_ai.operation.name=skill` and `gen.ai.skill.name` |
 | `gen_ai.agent.request.duration` | `gen_ai.workflow.duration` | replaced | Workflow duration uses seconds and `gen_ai.operation.name=invoke_agent` |
 | `gen_ai.agent.request.count` | no replacement | removed | No request counter is emitted |
-| `gen_ai.agent.operation.count` | no replacement | removed | No operation counter is emitted |
+| `gen_ai.agent.operation.count` | retained | retained | Uses normalized `status` for `chat`, `execute_tool`, and `skill` operations |
 | `gen_ai.agent.session.token.*` | no replacement | removed | `hermes_request` / `invoke_agent` no longer emit aggregated usage metrics |
 | `gen_ai.agent.skill.activation.count` | no direct counter replacement | removed | Skill duration is represented by `gen_ai.client.operation.duration` with `gen_ai.operation.name=skill` |
 | `gen_ai.agent.subagent.*` | no replacement | removed | Subagent activity remains visible through spans |
@@ -83,7 +83,7 @@ The following fields currently have no stable GenAI standard replacement and rem
 - `session_channel_target`
 - `tool_result_status`
 - `tool_phase`
-- `tool_outcome`
+- `tool_status`
 - `skill.name`
 - `skill.description`
 - `skill.path`

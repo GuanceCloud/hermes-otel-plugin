@@ -669,7 +669,7 @@ def _skill_trace_attrs(
     args: dict[str, Any],
     parsed: Any,
     tool_call_id: str | None,
-    outcome: str | None,
+    status: str | None,
 ) -> dict[str, Any]:
     if str(tool_name).strip().lower() != "skill_view":
         return {}
@@ -680,8 +680,8 @@ def _skill_trace_attrs(
     skill_source_type = _extract_skill_source_type(parsed, skill_path)
     skill_version = _extract_skill_version(parsed, skill_path, content)
     result_status = None
-    if outcome is not None:
-        result_status = "error" if outcome == "error" else "completed"
+    if status is not None:
+        result_status = "error" if status == "error" else "completed"
     attrs = {
         "skill_name": skill_name,
         "skill_description": skill_description,
@@ -701,7 +701,7 @@ def _skill_trace_attrs(
     return {key: value for key, value in attrs.items() if value is not None}
 
 
-def _resolve_tool_outcome(tool_name: str, parsed: Any) -> str:
+def _resolve_tool_status(tool_name: str, parsed: Any) -> str:
     if not isinstance(parsed, dict):
         return "completed"
 
@@ -836,7 +836,7 @@ def _api_error_attrs(
         error_message = error
     standard_error_type = _clip(error_code) or _clip(error_type) or _clip(reason)
     return {
-        "outcome": "error",
+        "status": "error",
         "error_type": _clip(error_type),
         "error_message": _clip(error_message, limit=1200),
         "error_code": _clip(error_code),
@@ -966,7 +966,7 @@ class TraceManager:
 
     def _cleanup_expired_turns(self) -> None:
         for turn in self._store.expire(self._config.root_span_ttl_ms):
-            self._finalize_turn_state(turn, outcome="expired", assistant_response=None)
+            self._finalize_turn_state(turn, status="expired", assistant_response=None)
 
     def _mark_turn_activity(self, turn: TurnState) -> None:
         turn.last_activity_monotonic_ns = _mono_ns()
@@ -1154,7 +1154,7 @@ class TraceManager:
         )
         previous = self._store.replace_turn(session_id, new_state)
         if previous is not None:
-            self._finalize_turn_state(previous, outcome="superseded", assistant_response=None)
+            self._finalize_turn_state(previous, status="superseded", assistant_response=None)
         self._metrics.record_turn_started(session_id, platform, model, request_type=new_state.request_type)
 
     def finish_turn(
@@ -1172,14 +1172,14 @@ class TraceManager:
         if turn is None:
             return
         self._mark_turn_activity(turn)
-        outcome = "completed"
+        status = "completed"
         if interrupted:
-            outcome = "interrupted"
+            status = "interrupted"
         elif not completed:
-            outcome = "failed"
-        self._finalize_turn_state(turn, outcome=outcome, assistant_response=assistant_response, platform=platform)
+            status = "failed"
+        self._finalize_turn_state(turn, status=status, assistant_response=assistant_response, platform=platform)
 
-    def finalize_session(self, session_id: str | None, platform: str, outcome: str) -> None:
+    def finalize_session(self, session_id: str | None, platform: str, status: str) -> None:
         if not session_id:
             return
         if self.is_child_session(session_id):
@@ -1188,7 +1188,7 @@ class TraceManager:
         if turn is None:
             return
         self._mark_turn_activity(turn)
-        self._finalize_turn_state(turn, outcome=outcome, assistant_response=None, platform=platform)
+        self._finalize_turn_state(turn, status=status, assistant_response=None, platform=platform)
 
     def start_api_request(
         self,
@@ -1324,7 +1324,7 @@ class TraceManager:
         if active is None:
             return
         duration_ms = (api_duration or 0.0) * 1000.0
-        outcome = "error" if finish_reason in {"error", "length"} else "completed"
+        status = "error" if finish_reason in {"error", "length"} else "completed"
         usage_summary = _normalize_cache_usage_for_turn(turn, _normalize_usage(usage))
         response_payload = response if isinstance(response, dict) else {}
         resolved_response_model = response_model or _clip(response_payload.get("model"), limit=256) or model
@@ -1356,7 +1356,7 @@ class TraceManager:
         }
         self._runtime.set_span_attributes(active.span, attrs)
         end_time_ns = _wall_ns()
-        if outcome == "error":
+        if status == "error":
             self._runtime.end_span(
                 active.span,
                 end_time_ns=end_time_ns,
@@ -1382,7 +1382,7 @@ class TraceManager:
             provider_name=provider,
             response_model=resolved_response_model,
             duration_ms=duration_ms,
-            outcome=outcome,
+            status=status,
             usage=usage,
             error_type=None,
             base_url=active.attrs.get("base_url"),
@@ -1487,7 +1487,7 @@ class TraceManager:
             provider_name=provider,
             response_model=model,
             duration_ms=duration_ms,
-            outcome="error",
+            status="error",
             usage=None,
             error_type=error_attrs.get("error.type"),
             base_url=base_url,
@@ -1640,14 +1640,14 @@ class TraceManager:
             parsed = json.loads(result)
         except Exception:
             parsed = result
-        outcome = _resolve_tool_outcome(tool_name, parsed)
+        status = _resolve_tool_status(tool_name, parsed)
         result_status = _extract_tool_result_status(parsed)
         skill_name = _extract_tool_skill_name(tool_name, args, parsed)
         self._emit_skill_span(
             turn=turn,
             tool_name=tool_name,
             parsed=parsed,
-            outcome=outcome,
+            status=status,
             loaded_at_ns=_wall_ns(),
             source_span=active.span,
             source_attrs=active.attrs,
@@ -1656,7 +1656,7 @@ class TraceManager:
             active.span,
             {
                 "tool_phase": "result",
-                "tool_outcome": outcome,
+                "tool_status": status,
                 "tool_result_status": result_status,
                 "tool_result_preview": _json_preview(parsed),
                 "gen_ai.tool.call.result": _json_attr(parsed),
@@ -1665,22 +1665,22 @@ class TraceManager:
                     args,
                     parsed,
                     str(active.attrs.get("tool_call_id") or tool_call_id or "").strip() or None,
-                    outcome,
+                    status,
                 ),
-                "error.type": outcome if outcome == "error" else None,
+                "error.type": status if status == "error" else None,
             },
         )
         self._runtime.end_span(
             active.span,
-            status_code="ERROR" if outcome == "error" else "OK",
-            description=outcome,
+            status_code="ERROR" if status == "error" else "OK",
+            description=status,
         )
         self._metrics.record_tool_call(
             session_id=resolved_session_id,
             platform=platform or turn.platform,
             tool_name=tool_name,
             duration_ms=duration_ms,
-            outcome=outcome,
+            status=status,
             result_status=result_status,
             skill_name=skill_name,
             model_name=turn.response_model or turn.request_model or turn.model,
@@ -1691,14 +1691,14 @@ class TraceManager:
                 "session_id": resolved_session_id,
                 "platform": platform or turn.platform,
                 "tool_name": tool_name,
-                "tool_outcome": outcome,
+                "tool_status": status,
                 "tool_result_status": result_status,
                 "tool_args_preview": _json_preview(args),
                 "tool_result_preview": _json_preview(parsed),
             },
         )
         tool_context = _clip(
-            f"{tool_name}: {(_json_preview(parsed, limit=180) or outcome)}",
+            f"{tool_name}: {(_json_preview(parsed, limit=180) or status)}",
             limit=320,
         )
         if tool_context:
@@ -1711,14 +1711,14 @@ class TraceManager:
         turn: TurnState,
         tool_name: str,
         parsed: Any,
-        outcome: str,
+        status: str,
         loaded_at_ns: int,
         source_span: Any,
         source_attrs: dict[str, Any],
     ) -> None:
-        if tool_name != "skill_view" or outcome != "completed" or not isinstance(parsed, dict):
+        if tool_name != "skill_view" or status != "completed" or not isinstance(parsed, dict):
             return
-        skill_attrs = _skill_trace_attrs(tool_name, {}, parsed, source_attrs.get("tool_call_id"), outcome)
+        skill_attrs = _skill_trace_attrs(tool_name, {}, parsed, source_attrs.get("tool_call_id"), status)
         skill_name = str(skill_attrs.get("skill_name") or "").strip()
         if not skill_name:
             return
@@ -1729,7 +1729,7 @@ class TraceManager:
                 session_id=turn.session_id,
                 skill_name=str(previous.attrs.get("skill_name") or skill_name),
                 duration_ms=max(0.0, (_mono_ns() - previous.started_monotonic_ns) / 1_000_000.0),
-                outcome="completed",
+                status="completed",
             )
         span = self._runtime.start_span(
             f"skill:{skill_name}",
@@ -1793,7 +1793,7 @@ class TraceManager:
                 session_id=turn.session_id,
                 skill_name=str(active.attrs.get("skill_name") or active.key),
                 duration_ms=max(0.0, (_mono_ns() - active.started_monotonic_ns) / 1_000_000.0),
-                outcome=_normalize_skill_metric_outcome(reason),
+                status=_normalize_skill_metric_outcome(reason),
             )
         turn.active_skills.clear()
 
@@ -1832,7 +1832,7 @@ class TraceManager:
                 **_gen_ai_agent_attrs(parent_session_id),
                 "subagent_role": display_role,
                 "subagent_runtime_role": runtime_role if runtime_role != display_role else None,
-                "outcome": child_status,
+                "status": child_status,
                 "output_preview": _clip(child_summary),
                 "output_length": len(child_summary or ""),
             },
@@ -1847,7 +1847,7 @@ class TraceManager:
             session_id=parent_session_id,
             child_role=display_role,
             duration_ms=float(duration_ms),
-            outcome=child_status,
+            status=child_status,
         )
         self._logs.emit_subagent(
             "Hermes subagent finished",
@@ -1855,7 +1855,7 @@ class TraceManager:
                 "session_id": parent_session_id,
                 "subagent_role": display_role,
                 "subagent_runtime_role": runtime_role if runtime_role != display_role else None,
-                "outcome": child_status,
+                "status": child_status,
                 "output_preview": _clip(child_summary),
             },
         )
@@ -1863,7 +1863,7 @@ class TraceManager:
     def _finalize_turn_state(
         self,
         turn: TurnState,
-        outcome: str,
+        status: str,
         assistant_response: str | None,
         platform: str | None = None,
     ) -> None:
@@ -1872,12 +1872,12 @@ class TraceManager:
         for active in list(turn.active_tools.values()):
             self._runtime.end_span(active.span, status_code="ERROR", description="orphaned_tool")
         self._finalize_pending_llm(turn, assistant_response=assistant_response)
-        self._close_active_skills(turn, end_time_ns=_wall_ns(), reason=outcome)
+        self._close_active_skills(turn, end_time_ns=_wall_ns(), reason=status)
         duration_ms = max(0.0, (_mono_ns() - turn.started_monotonic_ns) / 1_000_000.0)
         final_platform = platform or turn.platform
         output_length = len(assistant_response or "")
         output_preview = _clip(assistant_response)
-        final_outcome = "failed" if outcome == "finalized" and turn.api_error_terminal else outcome
+        final_status = "failed" if status == "finalized" and turn.api_error_terminal else status
         aggregate_total_tokens = turn.aggregate_input_tokens + turn.aggregate_output_tokens
         aggregate_usage = {
             "input_tokens": turn.aggregate_input_tokens,
@@ -1890,7 +1890,7 @@ class TraceManager:
         }
         resolved_response_model = turn.response_model or turn.request_model or turn.model
         final_attrs = {
-            "final_status": final_outcome,
+            "final_status": final_status,
             "response_model": resolved_response_model,
             "provider_name": turn.provider_name,
             **_gen_ai_agent_attrs(turn.session_id, turn.request_model or turn.model),
@@ -1901,11 +1901,11 @@ class TraceManager:
         }
         self._runtime.set_span_attributes(turn.agent_span, final_attrs)
         self._runtime.set_span_attributes(turn.root_span, final_attrs)
-        status_code = "ERROR" if final_outcome in {"failed", "expired"} else "OK"
-        if final_outcome in {"interrupted", "superseded", "reset"}:
+        status_code = "ERROR" if final_status in {"failed", "expired"} else "OK"
+        if final_status in {"interrupted", "superseded", "reset"}:
             status_code = "UNSET"
-        self._runtime.end_span(turn.agent_span, status_code=status_code, description=final_outcome)
-        self._runtime.end_span(turn.root_span, status_code=status_code, description=final_outcome)
+        self._runtime.end_span(turn.agent_span, status_code=status_code, description=final_status)
+        self._runtime.end_span(turn.root_span, status_code=status_code, description=final_status)
         self._metrics.record_turn_finished(
             session_id=turn.session_id,
             platform=final_platform,
@@ -1914,16 +1914,16 @@ class TraceManager:
             response_model=resolved_response_model,
             request_type=turn.request_type,
             review_category=turn.review_category,
-            session_state=final_outcome,
+            session_state=final_status,
             usage=aggregate_usage,
-            outcome=final_outcome,
+            status=final_status,
             duration_ms=duration_ms,
         )
-        if final_outcome == "interrupted":
+        if final_status == "interrupted":
             self._metrics.record_interrupted_turn(turn.session_id, final_platform)
         self._logs.emit_session_event(
             "Hermes turn finished",
             session_id=turn.session_id,
             platform=final_platform,
-            outcome=final_outcome,
+            status=final_status,
         )

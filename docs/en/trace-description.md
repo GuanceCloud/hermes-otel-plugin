@@ -207,7 +207,7 @@ Purpose:
   - `gen_ai.tool.call.result`
   - `tool_call_id`
   - `tool_phase`
-  - `tool_outcome`
+  - `tool_status`
   - `tool_arg_keys`
   - `tool_target`
   - `tool_command`
@@ -221,7 +221,7 @@ Alignment with `openclaw-otel-plugin`:
   - `tool_name`
   - `tool_call_id`
   - `tool_phase`
-  - `tool_outcome`
+  - `tool_status`
   - `tool_arg_keys`
   - `tool_target`
   - `tool_command`
@@ -399,7 +399,7 @@ Additional notes:
 | `tool_name` | Tool name |
 | `tool_call_id` | Tool call identifier |
 | `tool_phase` | Tool phase, currently `call` or `result` |
-| `tool_outcome` | Plugin-normalized tool result, currently `completed` or `error` |
+| `tool_status` | Plugin-normalized tool result, currently `completed` or `error` |
 | `tool_arg_keys` | Tool argument key list |
 | `tool_target` | Tool target such as file path, search path, or skill name |
 | `tool_command` | Tool command, mainly for `terminal` |
@@ -420,11 +420,11 @@ These fields are recommended as required tool tags in the product model.
 | `tool_name` | Required | Tool name |
 | `tool_call_id` | Required | Tool call identifier. May be empty if the host does not provide one. |
 | `tool_phase` | Required | Current tool phase. Current model: `call` / `result`. |
-| `tool_outcome` | Required | Plugin-normalized result. Current model: `completed` / `error`. |
+| `tool_status` | Required | Plugin-normalized result. Current model: `completed` / `error`. |
 | `tool_arg_keys` | Required | Tool argument key list |
 | `tool_args_preview` | Required | Tool argument summary |
 | `tool_result_preview` | Required | Tool result summary |
-| `tool_result_status` | Required | Explicit status from the tool result payload, distinct from `tool_outcome` |
+| `tool_result_status` | Required | Explicit status from the tool result payload, distinct from `tool_status` |
 
 #### Conditional
 
@@ -453,8 +453,8 @@ These fields exist in OpenClaw, but Hermes cannot reliably provide them from cur
 
 #### Normalization Rules
 
-- `tool_outcome` is the plugin-normalized execution result used for cross-tool aggregation.
-- `tool_result_status` only represents the explicit status in the tool result payload and must not collapse into `tool_outcome`.
+- `tool_status` is the plugin-normalized execution result used for cross-tool aggregation.
+- `tool_result_status` only represents the explicit status in the tool result payload and must not collapse into `tool_status`.
 - `tool_target` and `tool_command` may be derived conservatively by tool type, but should not contain guessed values just for completeness.
 - For product standardization, semantic stability is more important than field count.
 
@@ -493,7 +493,7 @@ Additional fields:
 | --- | --- |
 | `subagent_role` | Display role of the child agent. If Hermes only returns a generic role such as `leaf`, the plugin prefers falling back to `delegate_task.profile`. |
 | `subagent_runtime_role` | Raw child-agent role returned by Hermes hooks, such as `leaf` |
-| `outcome` | Child-agent result |
+| `status` | Child-agent result |
 | `output_preview` | Child-agent output summary |
 | `output_length` | Child-agent output length |
 

@@ -48,7 +48,7 @@
 | `gen_ai.agent.operation.duration` with `operation_name=skill` | `gen_ai.client.operation.duration` | 替换 | skill 调用使用 `gen_ai.operation.name=skill` 和 `gen.ai.skill.name` |
 | `gen_ai.agent.request.duration` | `gen_ai.workflow.duration` | 替换 | workflow duration 单位为秒，`gen_ai.operation.name=invoke_agent` |
 | `gen_ai.agent.request.count` | 无替代 | 移除 | 不再输出 request counter |
-| `gen_ai.agent.operation.count` | 无替代 | 移除 | 不再输出 operation counter |
+| `gen_ai.agent.operation.count` | 保留 | 保留 | 对 `chat`、`execute_tool`、`skill` 操作输出统一 `status` |
 | `gen_ai.agent.session.token.*` | 无替代 | 移除 | `hermes_request` / `invoke_agent` 不再输出聚合 usage 指标 |
 | `gen_ai.agent.skill.activation.count` | 无直接 counter 替代 | 移除 | skill 耗时由 `gen_ai.operation.name=skill` 的 `gen_ai.client.operation.duration` 表达 |
 | `gen_ai.agent.subagent.*` | 无替代 | 移除 | subagent 活动仍可通过 spans 查看 |
@@ -83,7 +83,7 @@
 - `session_channel_target`
 - `tool_result_status`
 - `tool_phase`
-- `tool_outcome`
+- `tool_status`
 - `skill.name`
 - `skill.description`
 - `skill.path`

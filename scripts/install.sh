@@ -427,7 +427,7 @@ reserved_exact = {
     "max_tokens",
     "model_name",
     "operation_name",
-    "outcome",
+    "status",
     "output_length",
     "output_preview",
     "platform",

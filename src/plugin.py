@@ -92,7 +92,7 @@ class HermesOtelPlugin:
             model="test-model",
             provider_name="test-provider",
             response_model="test-model",
-            outcome="completed",
+            status="completed",
             duration_ms=1.0,
         )
         self._logs.emit(
@@ -103,7 +103,7 @@ class HermesOtelPlugin:
                 "agent_version": AGENT_VERSION,
                 "session_id": "test-session",
                 "platform": "cli",
-                "outcome": "completed",
+                "status": "completed",
             },
         )
         self._runtime.force_flush()
@@ -160,14 +160,14 @@ class HermesOtelPlugin:
         assert self._traces is not None
         if self._traces.is_child_session(session_id):
             return
-        outcome = "completed"
+        status = "completed"
         if interrupted:
-            outcome = "interrupted"
+            status = "interrupted"
         elif not completed:
-            outcome = "failed"
-        self._metrics.record_session_end(session_id, platform, outcome)
-        self._logs.emit_session_event("Hermes session ended", session_id, platform, outcome)
-        self._traces.finalize_session(session_id, platform=platform, outcome=outcome)
+            status = "failed"
+        self._metrics.record_session_end(session_id, platform, status)
+        self._logs.emit_session_event("Hermes session ended", session_id, platform, status)
+        self._traces.finalize_session(session_id, platform=platform, status=status)
 
     def on_session_finalize(self, session_id: str | None, platform: str = "unknown", **_: Any) -> None:
         if not self._enabled():
@@ -176,7 +176,7 @@ class HermesOtelPlugin:
         assert self._logs is not None
         if session_id and self._traces.is_child_session(session_id):
             return
-        self._traces.finalize_session(session_id, platform=platform, outcome="finalized")
+        self._traces.finalize_session(session_id, platform=platform, status="finalized")
         if session_id:
             self._logs.emit_session_event("Hermes session finalized", session_id, platform, "finalized")
 

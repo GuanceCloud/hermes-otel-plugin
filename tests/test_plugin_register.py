@@ -80,8 +80,8 @@ class PluginRegisterTests(unittest.TestCase):
             def record_session_start(self, session_id, platform) -> None:
                 self.calls.append(("start", session_id, platform))
 
-            def record_session_end(self, session_id, platform, outcome) -> None:
-                self.calls.append(("end", session_id, platform, outcome))
+            def record_session_end(self, session_id, platform, status) -> None:
+                self.calls.append(("end", session_id, platform, status))
 
             def record_session_reset(self, session_id, platform) -> None:
                 self.calls.append(("reset", session_id, platform))
@@ -100,8 +100,8 @@ class PluginRegisterTests(unittest.TestCase):
             def is_child_session(self, session_id) -> bool:
                 return session_id == "child-sess"
 
-            def finalize_session(self, session_id, platform, outcome) -> None:
-                self.finalized.append((session_id, platform, outcome))
+            def finalize_session(self, session_id, platform, status) -> None:
+                self.finalized.append((session_id, platform, status))
 
         plugin._bootstrapped = True
         plugin._config = mock.Mock(enabled=True)

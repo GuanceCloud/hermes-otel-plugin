@@ -312,7 +312,7 @@ class TraceManagerTests(unittest.TestCase):
         self.assertEqual(tool_span.attributes["agent_version"], AGENT_VERSION)
         self.assertEqual(tool_span.attributes["span_kind"], "tool")
         self.assertEqual(tool_span.attributes["tool_phase"], "result")
-        self.assertEqual(tool_span.attributes["tool_outcome"], "completed")
+        self.assertEqual(tool_span.attributes["tool_status"], "completed")
         self.assertEqual(tool_span.attributes["tool_command"], "echo hello")
         self.assertEqual(tool_span.attributes["tool_result_preview"], '{"output": "hello"}')
         self.assertEqual(tool_span.attributes["gen_ai.operation.name"], "execute_tool")
@@ -333,9 +333,17 @@ class TraceManagerTests(unittest.TestCase):
             for call in self.manager._metrics._client_operation_duration.calls
             if call[2].get("gen_ai.operation.name") == "execute_tool"
         )
+        tool_count_call = next(
+            call
+            for call in self.manager._metrics._operation_count.calls
+            if call[2].get("gen_ai.operation.name") == "execute_tool"
+        )
         self.assertGreaterEqual(tool_operation_call[1], 0.0)
         self.assertEqual(tool_operation_call[2]["gen_ai.operation.name"], "execute_tool")
         self.assertEqual(tool_operation_call[2]["gen_ai.tool.name"], "terminal")
+        self.assertEqual(tool_count_call[1], 1)
+        self.assertEqual(tool_count_call[2]["status"], "ok")
+        self.assertNotIn("tool_result_status", tool_count_call[2])
         self.assertNotIn("tool_name", tool_operation_call[2])
         self.assertFalse(hasattr(self.manager._metrics, "_tool_call_count"))
         workflow_call = self.manager._metrics._workflow_duration.calls[0]
@@ -354,6 +362,15 @@ class TraceManagerTests(unittest.TestCase):
         self.assertEqual(client_duration_call[1], 0.25)
         self.assertEqual(client_duration_call[2]["gen_ai.request.model"], "gpt-test")
         self.assertEqual(client_duration_call[2]["gen_ai.operation.name"], "chat")
+        chat_count_call = next(
+            call
+            for call in self.manager._metrics._operation_count.calls
+            if call[2].get("gen_ai.operation.name") == "chat"
+        )
+        self.assertEqual(chat_count_call[1], 1)
+        self.assertEqual(chat_count_call[2]["status"], "ok")
+        self.assertEqual(chat_count_call[2]["gen_ai.provider.name"], "openai")
+        self.assertEqual(chat_count_call[2]["gen_ai.request.model"], "gpt-test")
 
     def test_session_metadata_fields_are_attached_to_root_and_agent_spans(self) -> None:
         self.session_metadata.items["sess-meta"] = SessionMetadata(
@@ -1048,7 +1065,7 @@ class TraceManagerTests(unittest.TestCase):
         )
 
         tool_span = next(span for span in self.runtime.spans if span.name == "tool:delegate_task")
-        self.assertEqual(tool_span.attributes["tool_outcome"], "completed")
+        self.assertEqual(tool_span.attributes["tool_status"], "completed")
         self.assertNotIn("tool_result_status", tool_span.attributes)
         self.assertEqual(tool_span.status_code, "OK")
 
@@ -1178,6 +1195,15 @@ class TraceManagerTests(unittest.TestCase):
         self.assertEqual(skill_operation_calls[0][2]["gen.ai.skill.name"], "skill_manage")
         self.assertEqual(skill_operation_calls[0][2]["gen_ai.conversation.id"], "sess-6")
         self.assertNotIn("skill_name", skill_operation_calls[0][2])
+        skill_count_calls = [
+            call
+            for call in self.manager._metrics._operation_count.calls
+            if call[2].get("gen_ai.operation.name") == "skill"
+        ]
+        self.assertEqual(len(skill_count_calls), 1)
+        self.assertEqual(skill_count_calls[0][1], 1)
+        self.assertEqual(skill_count_calls[0][2]["gen.ai.skill.name"], "skill_manage")
+        self.assertEqual(skill_count_calls[0][2]["status"], "ok")
 
     def test_failed_skill_view_marks_tool_result_status_without_emitting_skill_span(self) -> None:
         self.manager.start_turn(
@@ -1414,11 +1440,11 @@ class TraceManagerTests(unittest.TestCase):
         self.assertEqual(tool_spans[0].attributes["tool_call_id"], "call-real-1")
         self.assertEqual(tool_spans[0].attributes["tool_phase"], "result")
         self.assertEqual(tool_spans[0].attributes["tool_target"], "/tmp")
-        self.assertEqual(tool_spans[0].attributes["tool_outcome"], "completed")
+        self.assertEqual(tool_spans[0].attributes["tool_status"], "completed")
         self.assertNotIn("tool_result_status", tool_spans[0].attributes)
         self.assertEqual(tool_spans[0].status_code, "OK")
 
-    def test_tool_result_status_is_distinct_from_tool_outcome(self) -> None:
+    def test_tool_result_status_is_distinct_from_tool_status(self) -> None:
         self.manager.start_turn(
             session_id="sess-tool-status",
             user_message="run",
@@ -1450,13 +1476,17 @@ class TraceManagerTests(unittest.TestCase):
         )
 
         tool_span = next(span for span in self.runtime.spans if span.name == "tool:terminal")
-        self.assertEqual(tool_span.attributes["tool_outcome"], "completed")
+        self.assertEqual(tool_span.attributes["tool_status"], "completed")
         self.assertEqual(tool_span.attributes["tool_result_status"], "completed")
         self.assertEqual(tool_span.attributes["tool_command"], "python app.py")
         tool_metric_attrs = self.manager._metrics._client_operation_duration.calls[0][2]
         self.assertEqual(tool_metric_attrs["tool_result_status"], "completed")
         self.assertEqual(tool_metric_attrs["gen_ai.operation.name"], "execute_tool")
-        self.assertNotIn("outcome", tool_metric_attrs)
+        self.assertNotIn("status", tool_metric_attrs)
+        tool_count_attrs = self.manager._metrics._operation_count.calls[0][2]
+        self.assertEqual(tool_count_attrs["gen_ai.operation.name"], "execute_tool")
+        self.assertEqual(tool_count_attrs["status"], "ok")
+        self.assertNotIn("tool_result_status", tool_count_attrs)
 
     def test_api_request_error_marks_llm_and_parent_spans(self) -> None:
         self.manager.start_turn(
@@ -1495,7 +1525,7 @@ class TraceManagerTests(unittest.TestCase):
                 "code": "token_invalidated",
             },
         )
-        self.manager.finalize_session("sess-auth-error", platform="cli", outcome="finalized")
+        self.manager.finalize_session("sess-auth-error", platform="cli", status="finalized")
 
         llm_span = next(span for span in self.runtime.spans if span.name == "llm")
         root_span = next(span for span in self.runtime.spans if span.name == "hermes_request")
@@ -1519,15 +1549,18 @@ class TraceManagerTests(unittest.TestCase):
 
         request_error_call = self.manager._metrics._client_operation_duration.calls[0]
         self.assertEqual(request_error_call[2]["gen_ai.operation.name"], "chat")
-        self.assertNotIn("outcome", request_error_call[2])
+        self.assertNotIn("status", request_error_call[2])
         self.assertEqual(request_error_call[2]["error.type"], "token_invalidated")
         self.assertEqual(request_error_call[2]["gen_ai.provider.name"], "openai-codex")
         self.assertEqual(request_error_call[2]["server.address"], "chatgpt.com")
         self.assertEqual(self.manager._metrics._client_token_usage.calls, [])
+        request_error_count_call = self.manager._metrics._operation_count.calls[0]
+        self.assertEqual(request_error_count_call[2]["gen_ai.operation.name"], "chat")
+        self.assertEqual(request_error_count_call[2]["status"], "error")
         workflow_call = self.manager._metrics._workflow_duration.calls[0]
         self.assertEqual(workflow_call[2]["gen_ai.operation.name"], "invoke_agent")
         self.assertNotIn("session_state", workflow_call[2])
-        self.assertEqual(self.runtime.logs[-1][1]["outcome"], "failed")
+        self.assertEqual(self.runtime.logs[-1][1]["status"], "failed")
 
 
 if __name__ == "__main__":

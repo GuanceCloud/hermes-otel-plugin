@@ -67,7 +67,7 @@ RESERVED_RESOURCE_ATTRIBUTE_KEYS = frozenset(
         "max_tokens",
         "model_name",
         "operation_name",
-        "outcome",
+        "status",
         "output_length",
         "output_preview",
         "platform",
