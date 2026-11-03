@@ -141,6 +141,22 @@ For GitHub Releases, use the repository `.../releases` root with `latest` by def
 
 ### Source install
 
+The release installer uses `HERMES_PYTHON` for dependency installation, tag
+conversion, and YAML configuration updates. PyYAML is installed into that same
+runtime with the plugin dependencies; system `python3` does not need PyYAML.
+When Hermes code and data use different directories, select its interpreter
+explicitly, for example:
+
+```bash
+export HERMES_HOME=/data/hermes-data
+export HERMES_PYTHON=/opt/hermes-agent/.venv/bin/python
+```
+
+`--no-deps` requires PyYAML to already exist in the selected interpreter when
+configuration is written. `--no-config` preserves existing configuration.
+After a failed configuration update, rerun the installation with configuration
+enabled; an update using `--no-config` does not repair the failed configuration.
+
 Manual source install is still supported when you are actively developing the plugin:
 
 ```text

@@ -9,6 +9,7 @@ description = "Hermes OTLP telemetry plugin"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+  "PyYAML>=6.0,<7",
   "opentelemetry-api>=1.39,<2",
   "opentelemetry-sdk>=1.39,<2",
   "opentelemetry-exporter-otlp-proto-http>=1.39,<2",
