@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.10
+
+- Use HERMES_PYTHON for dependency installation, tag conversion, and YAML configuration updates; host python3 no longer needs PyYAML.
+- Install PyYAML into the selected Hermes runtime and fail early if the interpreter is missing.
+- Merge configuration atomically, preserving existing values, permissions, and symlink targets.
+- Add seven isolated installer regressions covering custom data/runtime directories, dependency bootstrap, and configuration preservation.
+- Align package, manifest, and runtime plugin versions; validate consistency before packaging and publish complete checksums.
+- See [release notes](docs/releases/v0.1.10.md).
+
 ## 0.1.7
 
 - Updated the installer restart flow to try `sudo systemctl restart hermes-gateway.service` first.

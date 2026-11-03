@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import hashlib
+import ast
 import json
+import re
 import shutil
 import tarfile
 from datetime import datetime, timezone
@@ -29,7 +31,8 @@ def log(message: str) -> None:
 
 def copy_recursive(source_path: Path, target_path: Path) -> None:
     if source_path.is_dir():
-        shutil.copytree(source_path, target_path, dirs_exist_ok=True)
+        shutil.copytree(source_path, target_path, dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store"))
         return
     target_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source_path, target_path)
@@ -45,6 +48,16 @@ def write_sha256(file_path: Path) -> Path:
 def create_archive(archive_path: Path, source_dir: Path) -> None:
     with tarfile.open(archive_path, "w:gz") as tar:
         tar.add(source_dir, arcname=source_dir.name)
+
+
+def validate_release_version(repo_root: Path, version: str) -> None:
+    manifest = re.search(r"^version:\s*([^\s#]+)", (repo_root / "plugin.yaml").read_text(), re.MULTILINE)
+    runtime_version = None
+    for node in ast.parse((repo_root / "src/__init__.py").read_text()).body:
+        if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "PLUGIN_VERSION" for target in node.targets):
+            runtime_version = ast.literal_eval(node.value)
+    if manifest is None or manifest[1].strip("\"'") != version or runtime_version != version:
+        raise ValueError("pyproject.toml, plugin.yaml and PLUGIN_VERSION must have the same release version")
 
 
 def standalone_release_notes(repo_root: Path, version: str, plugin_name: str) -> str:
@@ -71,11 +84,13 @@ def main() -> None:
     project = pyproject["project"]
     plugin_name = project["name"]
     version = project["version"]
+    validate_release_version(repo_root, version)
     artifact_base = f"{plugin_name}-v{version}"
     staging_dir = output_dir / artifact_base
     archive_path = output_dir / f"{artifact_base}.tar.gz"
     latest_archive_path = output_dir / f"{plugin_name}.tar.gz"
     installer_path = output_dir / "install.sh"
+    installer_alias = output_dir / "install-release.sh"
     release_notes_path = output_dir / f"release-v{version}-notes.md"
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -117,7 +132,18 @@ def main() -> None:
     source_installer = repo_root / "scripts" / "install.sh"
     shutil.copy2(source_installer, installer_path)
     installer_path.chmod(0o755)
+    shutil.copy2(installer_path, installer_alias)
     release_notes_path.write_text(standalone_release_notes(repo_root, version, plugin_name), encoding="utf-8")
+
+    assets = [archive_path, latest_archive_path, checksum_path, latest_checksum_path,
+              installer_path, installer_alias, release_notes_path]
+    distribution = repo_root / "dist"
+    package_stem = plugin_name.replace("-", "_")
+    assets.extend(distribution.glob(f"{package_stem}-{version}-*.whl"))
+    assets.extend(distribution.glob(f"{package_stem}-{version}.tar.gz"))
+    sums = "".join(f"{hashlib.sha256(asset.read_bytes()).hexdigest()}  {asset.name}\n"
+                   for asset in sorted(assets, key=lambda p: p.name))
+    (output_dir / "SHA256SUMS").write_text(sums, encoding="utf-8")
 
     log(f"artifact: {archive_path.relative_to(repo_root)}")
     log(f"checksum: {checksum_path.relative_to(repo_root)}")
