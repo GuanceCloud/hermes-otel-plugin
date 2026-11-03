@@ -334,19 +334,17 @@ PY
 }
 
 configure_hermes_yaml() {
-  require_command python3
-
-  if ! python3 - <<'PY' >/dev/null 2>&1
+  if ! "$HERMES_PYTHON" - <<'PY' >/dev/null 2>&1
 import yaml
 PY
   then
-    printf '[install] python3 with PyYAML is required to update %s\n' "$CONFIG_FILE" >&2
+    printf '[install] Hermes python %s requires PyYAML to update %s; rerun without --no-deps to install runtime dependencies\n' "$HERMES_PYTHON" "$CONFIG_FILE" >&2
     exit 1
   fi
 
   local tags_json='[]'
   if [ "${#TAGS[@]}" -gt 0 ]; then
-    tags_json="$(printf '%s\n' "${TAGS[@]}" | python3 -c 'import json,sys; print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))')"
+    tags_json="$(printf '%s\n' "${TAGS[@]}" | "$HERMES_PYTHON" -c 'import json,sys; print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))')"
   fi
 
   HERMES_CONFIG_FILE_RUNTIME="$CONFIG_FILE" \
@@ -356,17 +354,19 @@ PY
   HERMES_PLUGIN_X_TOKEN_RUNTIME="$X_TOKEN" \
   HERMES_PLUGIN_SERVICE_NAME_RUNTIME="$SERVICE_NAME" \
   HERMES_PLUGIN_TAGS_RUNTIME="$tags_json" \
-  python3 <<'PY'
+  "$HERMES_PYTHON" <<'PY'
 import os
 import pathlib
+import stat
 import sys
+import tempfile
 
 try:
     import yaml
 except Exception as exc:  # pragma: no cover
     raise SystemExit(f"[install] PyYAML is required in Hermes python: {exc}")
 
-config_file = pathlib.Path(os.environ["HERMES_CONFIG_FILE_RUNTIME"])
+config_file = pathlib.Path(os.environ["HERMES_CONFIG_FILE_RUNTIME"]).resolve()
 plugin_dir = os.environ["HERMES_PLUGIN_DIR_RUNTIME"]
 endpoint = os.environ.get("HERMES_PLUGIN_ENDPOINT_RUNTIME", "")
 install_type = os.environ.get("HERMES_PLUGIN_INSTALL_TYPE_RUNTIME", "")
@@ -496,7 +496,16 @@ if install_type == "gtrace":
         headers["X-Token"] = x_token
 
 config_file.parent.mkdir(parents=True, exist_ok=True)
-config_file.write_text(yaml.safe_dump(config, allow_unicode=True, sort_keys=False), encoding="utf-8")
+text = yaml.safe_dump(config, allow_unicode=True, sort_keys=False)
+mode = stat.S_IMODE(config_file.stat().st_mode) if config_file.exists() else 0o600
+fd, temporary = tempfile.mkstemp(prefix=".hermes-config-", dir=config_file.parent)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as stream:
+        stream.write(text)
+    os.chmod(temporary, mode)
+    os.replace(temporary, config_file)
+finally:
+    pathlib.Path(temporary).unlink(missing_ok=True)
 PY
 }
 
@@ -541,6 +550,13 @@ restart_gateway_best_effort() {
 main() {
   require_command curl
   require_command tar
+
+  if [ "$INSTALL_DEPS" -eq 1 ] || [ "$WRITE_CONFIG" -eq 1 ]; then
+    if [ ! -x "$HERMES_PYTHON" ]; then
+      printf '[install] Hermes python was not found: %s; set HERMES_PYTHON to the Hermes runtime interpreter\n' "$HERMES_PYTHON" >&2
+      exit 1
+    fi
+  fi
 
   INSTALL_TYPE="$(normalize_install_type "$INSTALL_TYPE")"
   if [ "$WRITE_CONFIG" -eq 1 ] && [ "$INSTALL_TYPE" = "gtrace" ]; then

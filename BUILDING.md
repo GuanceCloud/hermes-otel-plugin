@@ -11,8 +11,13 @@
 Run unit tests:
 
 ```bash
+python -m pip install PyYAML
 python -m unittest discover -s tests -v
 ```
+
+Installer regressions use temporary homes and isolated virtual environments,
+with an offline pip double. They do not modify a real Hermes installation or
+download runtime dependencies.
 
 Optional packaging metadata check:
 
