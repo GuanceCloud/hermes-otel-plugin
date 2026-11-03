@@ -35,18 +35,23 @@ python3 scripts/release.py
 
 Release output:
 
-- `output/hermes-otel-plugin-v0.1.7.tar.gz`
-- `output/hermes-otel-plugin-v0.1.7.tar.gz.sha256`
+- `output/hermes-otel-plugin-v0.1.10.tar.gz`
+- `output/hermes-otel-plugin-v0.1.10.tar.gz.sha256`
 - `output/hermes-otel-plugin.tar.gz`
 - `output/hermes-otel-plugin.tar.gz.sha256`
 - `output/install.sh`
-- `output/release-v0.1.7-notes.md`
+- `output/install-release.sh`
+- `output/SHA256SUMS`
+- `output/release-v0.1.10-notes.md`
 
 The versioned archive is immutable release output.
 `hermes-otel-plugin.tar.gz` is the latest archive that can be overwritten per release.
 `release-vX.Y.Z-notes.md` is the standalone GitHub Release body used by the tag workflow.
 
 The installer is the primary operational entrypoint for end users.
+`SHA256SUMS` covers the release archives, installers, notes, and any matching
+Python wheel/source distribution built under `dist/`. Published files use flat
+asset names; verify checksums from a directory containing the downloaded assets.
 
 ## GitHub Actions
 
@@ -58,7 +63,7 @@ Behavior:
 
 - Pull requests and pushes to `main` run unit tests, `python -m build`, and `python scripts/release.py`
 - The workflow uploads `dist/` and `output/` as workflow artifacts
-- Pushing a tag like `v0.1.7` also creates a GitHub Release and attaches:
+- Pushing a tag like `v0.1.10` also creates a GitHub Release and attaches:
   - `dist/*.whl`
   - `dist/*.tar.gz`
   - `output/*.tar.gz`
