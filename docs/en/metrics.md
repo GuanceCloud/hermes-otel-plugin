@@ -43,6 +43,8 @@ The plugin no longer emits legacy `gen_ai.agent.*` or `gen_ai.runtime.*` metrics
 
 `host` and `host.name` are expected to be supplied as OTLP resource attributes by the runtime/exporter configuration instead of per-point metric tags.
 
+The OTLP Resource for all metrics always includes `agent_runtime=hermes` to identify the Agent runtime. The plugin sets this field automatically; no `resource_attributes` configuration is needed.
+
 ## Operation Semantics
 
 ### Workflow

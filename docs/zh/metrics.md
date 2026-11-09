@@ -43,6 +43,8 @@
 
 `host` 和 `host.name` 应由 runtime/exporter 配置写入 OTLP resource attributes，不作为每个 metric point 的普通 tag 重复写入。
 
+所有指标的 OTLP Resource 固定包含 `agent_runtime=hermes`，用于标识 Agent 运行时；该字段由插件自动设置，无需通过 `resource_attributes` 配置。
+
 ## Operation 语义
 
 ### Workflow

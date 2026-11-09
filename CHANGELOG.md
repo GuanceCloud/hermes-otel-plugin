@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.11
+
+- Include `agent_runtime=hermes` in the shared OTLP Resource so all metrics carry the runtime identity.
+- Add SDK-to-Protobuf regression coverage for all four metric families and document the automatic resource attribute.
+- Install declared runtime dependencies in CI before running the SDK integration test.
+- See [release notes](docs/releases/v0.1.11.md).
+
 ## 0.1.10
 
 - Use HERMES_PYTHON for dependency installation, tag conversion, and YAML configuration updates; host python3 no longer needs PyYAML.

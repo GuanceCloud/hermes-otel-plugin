@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from . import AGENT_RUNTIME
 from .config import HermesOtelPluginConfig, resolve_otlp_url
 
 
@@ -69,6 +70,7 @@ class OTelRuntime:
             resource_attrs = {
                 "service.name": self._config.service_name,
                 **self._config.resource_attributes,
+                "agent_runtime": AGENT_RUNTIME,
             }
             resource = Resource.create(resource_attrs)
 
